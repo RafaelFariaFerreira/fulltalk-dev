@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-label="fulltalk dev: code is cheap, show me the talk">
+  <!-- README cover. Render with scripts/make-illustrations.py -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#190F4D"/>
+      <stop offset=".52" stop-color="#4B31D3"/>
+      <stop offset="1" stop-color="#8A77F7"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#fff" stop-opacity=".30"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="dotfade" cx=".28" cy=".4" r=".75">
+      <stop offset="0" stop-color="#fff" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.3" fill="#fff" fill-opacity=".16"/>
+    </pattern>
+    <mask id="dotmask"><rect width="1280" height="640" fill="url(#dotfade)"/></mask>
+    <linearGradient id="wave" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fff" stop-opacity=".95"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".22"/>
+    </linearGradient>
+    <clipPath id="frame"><rect width="1280" height="640" rx="32"/></clipPath>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#0B0630" flood-opacity=".42"/>
+    </filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0B0630" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <style>
+    text { font-family: Inter, system-ui, sans-serif; }
+    .b { font-weight: 600; }
+    .mono { font-family: "DejaVu Sans Mono", "Noto Sans Mono", monospace; font-size: 14.5px; }
+  </style>
+
+  <g clip-path="url(#frame)">
+    <rect width="1280" height="640" fill="url(#bg)"/>
+    <ellipse cx="1040" cy="150" rx="520" ry="380" fill="url(#glow)"/>
+    <ellipse cx="160" cy="700" rx="460" ry="300" fill="url(#glow)" opacity=".55"/>
+    <rect width="1280" height="640" fill="url(#dots)" mask="url(#dotmask)"/>
+
+    <!-- brand -->
+    <g transform="translate(80 64) scale(.40625)">
+      <rect width="128" height="128" rx="30" fill="#fff"/>
+      <g fill="#5B3FE4">
+        <rect x="21.4" y="46.1" width="10.9" height="35.8" rx="5.45"/>
+        <rect x="40.0" y="30.7" width="10.9" height="66.6" rx="5.45"/>
+        <rect x="58.6" y="14.1" width="10.9" height="99.8" rx="5.45"/>
+        <rect x="77.2" y="30.7" width="10.9" height="66.6" rx="5.45"/>
+        <rect x="95.8" y="46.1" width="10.9" height="35.8" rx="5.45"/>
+      </g>
+    </g>
+    <text x="148" y="100" font-size="29" letter-spacing="-.4"><tspan class="b" fill="#fff">fulltalk</tspan><tspan fill="#CFC7FF" dx="8">dev</tspan></text>
+
+    <!-- headline -->
+    <text class="b" font-size="59" letter-spacing="-2" fill="#fff">
+      <tspan x="78" y="228" fill-opacity=".72">code is cheap,</tspan>
+      <tspan x="78" y="298">show me the talk.</tspan>
+    </text>
+    <text font-size="20.5" fill="#fff" fill-opacity=".82">
+      <tspan x="80" y="350">Local push-to-talk dictation for developers.</tspan>
+      <tspan x="80" y="381">Hold, speak, let go. Nothing leaves your machine.</tspan>
+    </text>
+
+    <!-- keycaps -->
+    <g transform="translate(80 426)">
+      <rect y="5" width="80" height="54" rx="13" fill="#0B0630" fill-opacity=".38"/>
+      <rect width="80" height="54" rx="13" fill="#fff" fill-opacity=".16" stroke="#fff" stroke-opacity=".45" stroke-width="1.5"/>
+      <text class="b" x="40" y="35" font-size="21" fill="#fff" text-anchor="middle">Alt</text>
+      <text x="103" y="35" font-size="22" fill="#fff" fill-opacity=".7" text-anchor="middle">+</text>
+      <rect x="126" y="5" width="58" height="54" rx="13" fill="#0B0630" fill-opacity=".38"/>
+      <rect x="126" width="58" height="54" rx="13" fill="#fff" fill-opacity=".16" stroke="#fff" stroke-opacity=".45" stroke-width="1.5"/>
+      <text class="b" x="155" y="35" font-size="21" fill="#fff" text-anchor="middle">S</text>
+      <text x="206" y="34" font-size="17.5" fill="#fff" fill-opacity=".78">hold to talk, release to paste</text>
+    </g>
+
+    <!-- chips -->
+    <g font-size="14.5" fill="#fff" transform="translate(80 530)">
+      <rect width="112" height="36" rx="18" fill="#fff" fill-opacity=".12" stroke="#fff" stroke-opacity=".22"/>
+      <text x="56" y="23" text-anchor="middle">100% local</text>
+      <rect x="124" width="132" height="36" rx="18" fill="#fff" fill-opacity=".12" stroke="#fff" stroke-opacity=".22"/>
+      <text x="190" y="23" text-anchor="middle">CPU only, ≈0.5 s</text>
+      <rect x="268" width="204" height="36" rx="18" fill="#fff" fill-opacity=".12" stroke="#fff" stroke-opacity=".22"/>
+      <text x="370" y="23" text-anchor="middle">Linux · Windows · macOS</text>
+    </g>
+
+    <!-- voice waveform -->
+    <g fill="url(#wave)" transform="translate(992 198)">
+      <rect x="0"   y="-22" width="10" height="44"  rx="5"/>
+      <rect x="20"  y="-48" width="10" height="96"  rx="5"/>
+      <rect x="40"  y="-78" width="10" height="156" rx="5"/>
+      <rect x="60"  y="-54" width="10" height="108" rx="5"/>
+      <rect x="80"  y="-98" width="10" height="196" rx="5"/>
+      <rect x="100" y="-66" width="10" height="132" rx="5"/>
+      <rect x="120" y="-34" width="10" height="68"  rx="5"/>
+      <rect x="140" y="-82" width="10" height="164" rx="5"/>
+      <rect x="160" y="-50" width="10" height="100" rx="5"/>
+      <rect x="180" y="-26" width="10" height="52"  rx="5"/>
+      <rect x="200" y="-58" width="10" height="116" rx="5"/>
+      <rect x="220" y="-20" width="10" height="40"  rx="5"/>
+    </g>
+
+    <!-- app window -->
+    <g filter="url(#shadow)">
+      <rect x="706" y="54" width="248" height="316" rx="28" fill="#fff"/>
+    </g>
+    <g fill="#5B3FE4" transform="translate(730 76)">
+      <rect x="0"  y="6" width="3" height="8"  rx="1.5"/>
+      <rect x="5"  y="2" width="3" height="16" rx="1.5"/>
+      <rect x="10" y="0" width="3" height="20" rx="1.5"/>
+      <rect x="15" y="2" width="3" height="16" rx="1.5"/>
+      <rect x="20" y="6" width="3" height="8"  rx="1.5"/>
+    </g>
+    <text x="762" y="91" font-size="14.5"><tspan class="b" fill="#1B1A2E">fulltalk</tspan><tspan fill="#5B3FE4" dx="4">dev</tspan></text>
+    <circle cx="830" cy="196" r="80" fill="#F5F3FE"/>
+    <circle cx="830" cy="196" r="64" fill="#E9E5FD"/>
+    <circle cx="830" cy="196" r="48" fill="#5B3FE4"/>
+    <g transform="translate(830 194)" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round">
+      <rect x="-8.5" y="-23" width="17" height="32" rx="8.5"/>
+      <path d="M-17 0a17 17 0 0 0 34 0"/>
+      <path d="M0 17v9"/>
+    </g>
+    <text class="b" x="830" y="312" font-size="17" fill="#1B1A2E" text-anchor="middle">Ouvindo sua fala…  0:03</text>
+    <text x="830" y="337" font-size="12.5" fill="#6C6A82" text-anchor="middle">Solte Alt+S para transcrever</text>
+
+    <!-- terminal -->
+    <g filter="url(#shadow)">
+      <rect x="742" y="420" width="488" height="150" rx="16" fill="#0F0B26"/>
+    </g>
+    <rect x="742.5" y="420.5" width="487" height="149" rx="15.5" fill="none" stroke="#fff" stroke-opacity=".14"/>
+    <circle cx="768" cy="445" r="5.5" fill="#FF6B6B"/>
+    <circle cx="787" cy="445" r="5.5" fill="#FFD166"/>
+    <circle cx="806" cy="445" r="5.5" fill="#5EE6A8"/>
+    <rect x="913" y="505.5" width="207" height="26" rx="5" fill="#5B3FE4" fill-opacity=".55"/>
+    <text class="mono" xml:space="preserve"><tspan x="768" y="492" fill="#A99BFF">~/projects/api</tspan><tspan fill="#5EE6A8">  main</tspan><tspan x="768" y="524" fill="#8E86B8">$ </tspan><tspan fill="#F4F2FF">git commit -m "corrige timeout na fila"</tspan></text>
+    <rect x="1130" y="508" width="9" height="21" fill="#fff" fill-opacity=".9"/>
+
+    <!-- toast -->
+    <g filter="url(#soft)">
+      <rect x="1010" y="396" width="204" height="44" rx="22" fill="#fff"/>
+    </g>
+    <circle cx="1034" cy="418" r="10" fill="#5B3FE4"/>
+    <path d="M1029.2 418.3l3.3 3.3 6.2-6.6" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="b" x="1054" y="423" font-size="14" fill="#1B1A2E">Transcrição pronta!</text>
+  </g>
+</svg>

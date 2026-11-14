@@ -1,10 +1,8 @@
 <div align="center">
 
-<img src="docs/logo.svg" width="72" alt="fulltalk dev logo">
+<img src="docs/illustrations/cover.webp" alt="fulltalk dev: code is cheap, show me the talk. Local push-to-talk dictation for developers." width="100%">
 
-# fulltalk dev
-
-**code is cheap, show me the talk.**
+<br><br>
 
 Local push-to-talk dictation for developers. Hold a shortcut, speak Portuguese,
 let go: the text lands in your editor, terminal or chat. Nothing leaves your machine.
@@ -14,9 +12,16 @@ let go: the text lands in your editor, terminal or chat. Nothing leaves your mac
 ![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20windows%20%7C%20macOS-5B3FE4)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-<img src="docs/hero.png" alt="fulltalk dev: main window with a 'transcription ready' toast and the settings window" width="820">
+**[Install](#install)** · [How it works](#how-it-works) · [Features](#features) · [Performance](#performance) · [Architecture](#architecture) · [Platform status](#platform-status)
 
 </div>
+
+## How it works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/illustrations/how-it-works-dark.png">
+  <img src="docs/illustrations/how-it-works-light.png" alt="Three steps: hold Alt+S in any app, speak, then let go and the text is pasted into the focused field or terminal" width="100%">
+</picture>
 
 ## Features
 
@@ -26,6 +31,97 @@ let go: the text lands in your editor, terminal or chat. Nothing leaves your mac
 - **Always on top, never in the way**: a small floating window that doesn't steal focus when you click it.
 - **100% local and offline** after a one-time ~670 MB model download. Runs on the CPU, no GPU required.
 - **Light**: a single ~40 MB binary, about 0.8 GB of RAM (most of it is the model), ~0% CPU while idle.
+- **Feels native**: one command installs it with an icon in your app menu, Start Menu or Launchpad, so you open it from the system search.
+
+<div align="center">
+<img src="docs/hero.png" alt="fulltalk dev: main window with a 'transcription ready' toast and the settings window" width="820">
+</div>
+
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/illustrations/local-dark.png">
+  <img src="docs/illustrations/local-light.png" alt="Your voice never leaves your machine: the microphone feeds a model running on your CPU, with no cloud involved" width="100%">
+</picture>
+
+## Install
+
+fulltalk dev is built from source with one command per platform. The installer also
+registers it as a regular application, so afterwards you open it from the system
+search like anything else you have installed:
+
+| | Open it with | What gets installed |
+|---|---|---|
+| **Linux** | <kbd>Super</kbd>, then type `fulltalk` | `~/.local/bin/fulltalk`, an icon and an app-menu entry |
+| **Windows** | <kbd>Win</kbd>, then type `fulltalk` | `%LOCALAPPDATA%\Programs\fulltalk dev` and a Start Menu shortcut |
+| **macOS** | <kbd>⌘</kbd>+<kbd>Space</kbd>, then type `fulltalk` | `/Applications/fulltalk dev.app` |
+
+Every platform needs [Rust](https://rustup.rs) (stable), Git and a microphone. Nothing
+is installed system-wide and no installer asks for admin rights, except the one-time
+Linux setup below.
+
+The first launch downloads the model (~670 MB) to the user data directory. Every
+launch after that works offline.
+
+### Linux
+
+```sh
+git clone https://github.com/RafaelFariaFerreira/fulltalk-dev.git
+cd fulltalk-dev
+scripts/setup-linux.sh     # one time, uses sudo: ALSA headers, `input` group, /dev/uinput access
+# log out and back in so the new group applies
+scripts/install-linux.sh   # builds, then adds "fulltalk dev" to your app menu
+```
+
+`setup-linux.sh` installs packages with `apt`. On other distros, install the ALSA
+development headers and `pkg-config` yourself (`alsa-lib-devel` on Fedora, `alsa-lib`
+on Arch); the script still does the rest.
+
+> [!WARNING]
+> Joining the `input` group lets your user's processes read every keyboard. Wayland
+> leaves no other way to get a hold-to-talk shortcut. If you skip it, the mic button
+> and the clipboard still work.
+
+### Windows
+
+Install Rust with the default MSVC toolchain (`rustup` offers to install the Visual
+Studio C++ Build Tools it needs). Then, in PowerShell:
+
+```powershell
+git clone https://github.com/RafaelFariaFerreira/fulltalk-dev.git
+cd fulltalk-dev
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1
+```
+
+Add `-Desktop` to get a desktop shortcut as well.
+
+### macOS
+
+```sh
+xcode-select --install     # one time, if the command line tools are missing
+git clone https://github.com/RafaelFariaFerreira/fulltalk-dev.git
+cd fulltalk-dev
+scripts/install-macos.sh
+```
+
+On first use, allow the **Microphone** prompt and enable fulltalk dev under
+System Settings → Privacy & Security → **Accessibility**. Paste and focus detection
+need it. The app is signed ad hoc on your machine, so macOS may ask for Accessibility
+again after you install a newer build: remove the old entry and add the app back.
+
+### Update, uninstall, or just run it
+
+To update, `git pull` and run the same installer again. To remove the app:
+
+```sh
+scripts/install-linux.sh --uninstall
+scripts/install-macos.sh --uninstall
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Uninstall
+```
+
+Uninstalling leaves your settings, history and the downloaded model in place.
+
+To try it without installing anything, run `cargo run --release -p fulltalk`.
 
 ## Performance
 
@@ -43,7 +139,7 @@ Two optimisations got memory down from 1.5 GB, and both are explained in code:
 - **ONNX Runtime "lean" mode** turns off weight pre-packing, which keeps a second copy of every int8 weight. That saves about 450 MB for roughly 12% more latency ([`fulltalk-asr`](crates/fulltalk-asr/src/lib.rs)).
 - **A pinned glibc `mmap` threshold** stops the hundreds of MB of model-loading temporaries from staying stuck in per-thread malloc arenas ([`memory.rs`](crates/fulltalk/src/memory.rs)).
 
-## How it works
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -99,38 +195,6 @@ cargo clippy --workspace --all-targets --all-features   # pedantic, zero warning
 
 CI runs `fmt`, `clippy -D warnings` and the full test suite on **Linux, Windows and macOS**.
 
-## Getting started
-
-### Requirements
-
-- Rust (stable, edition 2024): <https://rustup.rs>
-- A microphone
-
-### Linux
-
-```sh
-git clone https://github.com/RafaelFariaFerreira/fulltalk-dev.git
-cd fulltalk-dev
-scripts/setup-linux.sh     # one time: ALSA headers, `input` group, /dev/uinput access
-# log out and back in
-scripts/install-linux.sh   # builds and adds "fulltalk dev" to your app menu
-```
-
-> [!WARNING]
-> Joining the `input` group lets your user's processes read every keyboard. Wayland
-> leaves no other way to get a hold-to-talk shortcut. If you skip it, the mic button
-> and the clipboard still work.
-
-### Windows / macOS
-
-```sh
-cargo run --release -p fulltalk
-```
-
-On macOS, grant **Accessibility** permission (System Settings → Privacy & Security). Paste and focus detection need it.
-
-The first launch downloads the model (~670 MB) to the user data directory. Every launch after that works offline.
-
 ## Platform status
 
 ✅ verified on real hardware · 🧪 implemented and built and tested in CI, not yet verified on hardware
@@ -142,6 +206,7 @@ The first launch downloads the model (~670 MB) to the user data directory. Every
 | Paste into focused field | 🧪 uinput | 🧪 XTest | 🧪 SendInput | 🧪 CGEvent |
 | Detect text field / terminal | ✅ AT-SPI | 🧪 AT-SPI | 🧪 UI Automation | 🧪 AX API |
 | Always on top, click without stealing focus | 🧪 via XWayland | 🧪 | 🧪 `WS_EX_NOACTIVATE` | ⏳ planned |
+| Shows up in the system app search | ✅ `.desktop` entry | 🧪 `.desktop` entry | 🧪 Start Menu shortcut | 🧪 `.app` bundle |
 
 Developed on Ubuntu 26.04 (GNOME, Wayland). Reports from other platforms are very welcome.
 
@@ -151,7 +216,9 @@ Developed on Ubuntu 26.04 (GNOME, Wayland). Reports from other platforms are ver
 cargo run -p fulltalk                                  # the app (FULLTALK_LOG=debug for verbose logs)
 cargo run --release -p fulltalk-asr --example transcribe -- <model-dir> file.wav   # benchmark
 cargo run -p fulltalk-platform --example probe_focus  # what has focus right now?
-scripts/screenshots.sh                                 # regenerate README images from the real app
+scripts/screenshots.sh                                 # regenerate the README screenshots from the real app
+scripts/make-illustrations.py                          # render docs/illustrations/*.svg to PNG (needs Chrome)
+scripts/make-icons.py                                  # rebuild the .ico and .icns from the logo (needs Pillow)
 ```
 
 `FULLTALK_HOME=/some/dir` moves settings and history out of your real profile, which is handy for testing.

@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="384" viewBox="0 0 1280 384" role="img" aria-label="How it works: hold Alt+S, speak, let go and the text is pasted">
+  <!-- README "how it works" strip. Render with scripts/make-illustrations.py (light + dark). -->
+  <style>
+    svg {
+      --card: #F6F4FF; --card-stroke: #E3DEFA; --ink: #1B1A2E; --muted: #66647D;
+      --accent: #5B3FE4; --ring1: #E6E1FC; --ring2: #EFECFD; --on-accent: #fff;
+      --key: #fff; --key-stroke: #5B3FE4; --key-lip: #C9C1F3; --arrow: #B5ABEF;
+      --term: #14112E; --term-stroke: #14112E; --term-text: #F4F2FF; --term-dim: #8E86B8;
+    }
+    svg.dark {
+      --card: #16142A; --card-stroke: #2B2750; --ink: #F1EFFB; --muted: #A7A3C4;
+      --accent: #7B65F6; --ring1: #2A2460; --ring2: #1F1B45; --on-accent: #fff;
+      --key: #252043; --key-stroke: #8D7BFA; --key-lip: #0C0A1C; --arrow: #4B4486;
+      --term: #0A0819; --term-stroke: #2B2750; --term-text: #F4F2FF; --term-dim: #7C75A6;
+    }
+    text { font-family: Inter, system-ui, sans-serif; }
+    .b { font-weight: 600; }
+    .title { font-size: 23px; font-weight: 600; fill: var(--ink); letter-spacing: -.3px; }
+    .desc { font-size: 15.5px; fill: var(--muted); }
+    .num { font-size: 15px; font-weight: 600; fill: var(--on-accent); text-anchor: middle; }
+    .mono { font-family: "DejaVu Sans Mono", "Noto Sans Mono", monospace; font-size: 14px; }
+    .card { fill: var(--card); stroke: var(--card-stroke); stroke-width: 1.5; }
+    .arrow { fill: none; stroke: var(--arrow); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+
+  <!-- 1 · hold -->
+  <g>
+    <rect class="card" x="1" y="1" width="378" height="382" rx="28"/>
+    <g transform="translate(69 84)">
+      <rect y="7" width="118" height="80" rx="18" fill="var(--key-lip)"/>
+      <rect width="118" height="80" rx="18" fill="var(--key)" stroke="var(--key-stroke)" stroke-width="2.5"/>
+      <text class="b" x="59" y="50" font-size="28" fill="var(--ink)" text-anchor="middle">Alt</text>
+      <text x="140" y="50" font-size="28" fill="var(--muted)" text-anchor="middle">+</text>
+      <rect x="162" y="7" width="80" height="80" rx="18" fill="var(--key-lip)"/>
+      <rect x="162" width="80" height="80" rx="18" fill="var(--key)" stroke="var(--key-stroke)" stroke-width="2.5"/>
+      <text class="b" x="202" y="50" font-size="28" fill="var(--ink)" text-anchor="middle">S</text>
+    </g>
+    <!-- "pressed" ticks -->
+    <g stroke="var(--accent)" stroke-width="3" stroke-linecap="round">
+      <path d="M190 44v16M158 50l6 13M222 50l-6 13"/>
+    </g>
+    <circle cx="51" cy="262" r="15" fill="var(--accent)"/>
+    <text class="num" x="51" y="267.5">1</text>
+    <text class="title" x="78" y="270">Hold Alt + S</text>
+    <text class="desc" x="36" y="310">In any app, without leaving the keyboard.</text>
+    <text class="desc" x="36" y="334">Or click the mic to start and stop.</text>
+  </g>
+  <path class="arrow" d="M398 128h44M430 116l12 12-12 12"/>
+
+  <!-- 2 · speak -->
+  <g transform="translate(450 0)">
+    <rect class="card" x="1" y="1" width="378" height="382" rx="28"/>
+    <circle cx="190" cy="124" r="78" fill="var(--ring2)"/>
+    <circle cx="190" cy="124" r="62" fill="var(--ring1)"/>
+    <circle cx="190" cy="124" r="46" fill="var(--accent)"/>
+    <g transform="translate(190 122)" fill="none" stroke="var(--on-accent)" stroke-width="3.6" stroke-linecap="round">
+      <rect x="-8.5" y="-23" width="17" height="32" rx="8.5"/>
+      <path d="M-17 0a17 17 0 0 0 34 0"/>
+      <path d="M0 17v9"/>
+    </g>
+    <g fill="var(--accent)">
+      <rect x="36" y="110" width="8" height="28" rx="4" opacity=".35"/>
+      <rect x="52" y="96"  width="8" height="56" rx="4" opacity=".55"/>
+      <rect x="68" y="82"  width="8" height="84" rx="4" opacity=".8"/>
+      <rect x="84" y="104" width="8" height="40" rx="4"/>
+      <rect x="288" y="104" width="8" height="40" rx="4"/>
+      <rect x="304" y="82"  width="8" height="84" rx="4" opacity=".8"/>
+      <rect x="320" y="96"  width="8" height="56" rx="4" opacity=".55"/>
+      <rect x="336" y="110" width="8" height="28" rx="4" opacity=".35"/>
+    </g>
+    <circle cx="51" cy="262" r="15" fill="var(--accent)"/>
+    <text class="num" x="51" y="267.5">2</text>
+    <text class="title" x="78" y="270">Speak</text>
+    <text class="desc" x="36" y="310">Portuguese, transcribed on your CPU.</text>
+    <text class="desc" x="36" y="334">About half a second for 5 s of speech.</text>
+  </g>
+  <path class="arrow" d="M848 128h44M880 116l12 12-12 12"/>
+
+  <!-- 3 · let go -->
+  <g transform="translate(900 0)">
+    <rect class="card" x="1" y="1" width="378" height="382" rx="28"/>
+    <rect x="40" y="52" width="300" height="148" rx="14" fill="var(--term)" stroke="var(--term-stroke)" stroke-width="1.5"/>
+    <circle cx="62" cy="75" r="5" fill="#FF6B6B"/>
+    <circle cx="79" cy="75" r="5" fill="#FFD166"/>
+    <circle cx="96" cy="75" r="5" fill="#5EE6A8"/>
+    <rect x="74" y="107" width="207" height="25" rx="5" fill="#5B3FE4" fill-opacity=".6"/>
+    <rect x="74" y="136" width="131" height="25" rx="5" fill="#5B3FE4" fill-opacity=".6"/>
+    <text class="mono" xml:space="preserve"><tspan x="60" y="125" fill="var(--term-dim)">› </tspan><tspan fill="var(--term-text)">explica esse stack trace</tspan><tspan x="60" y="154" fill="var(--term-text)">  e sugere um fix</tspan></text>
+    <rect x="207" y="138" width="9" height="21" fill="#fff" fill-opacity=".9"/>
+    <circle cx="338" cy="54" r="19" fill="var(--accent)" stroke="var(--card)" stroke-width="5"/>
+    <path d="M329.5 54.5l6 6 11-12" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="51" cy="262" r="15" fill="var(--accent)"/>
+    <text class="num" x="51" y="267.5">3</text>
+    <text class="title" x="78" y="270">Let go</text>
+    <text class="desc" x="36" y="310">The text is pasted into the focused field</text>
+    <text class="desc" x="36" y="334">or terminal. Otherwise it is just copied.</text>
+  </g>
+</svg>
