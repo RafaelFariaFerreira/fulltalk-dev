@@ -1,0 +1,38 @@
+[package]
+name = "fulltalk-platform"
+description = "OS adapters for fulltalk dev: global hold-to-talk hotkey, synthetic paste, focused-widget detection, clipboard, autostart and window tweaks."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+fulltalk-core.workspace = true
+arboard = "3"
+auto-launch = "0.6"
+raw-window-handle = "0.6"
+thiserror.workspace = true
+tracing.workspace = true
+
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
+enigo = "0.6"
+global-hotkey = "0.10"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = "0.13"
+atspi = { version = "0.30", default-features = false, features = ["proxies", "connection", "wrappers"] }
+x11rb = "0.14"
+futures-lite = "2"
+zbus = "5"
+async-io = "2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Accessibility", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+accessibility-sys = "0.2"
+core-foundation = "0.10"
+
+[lints]
+workspace = true
