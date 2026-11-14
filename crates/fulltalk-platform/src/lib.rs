@@ -10,7 +10,12 @@
 //! | Focused text field | AT-SPI                 | AT-SPI        | UI Automation  | AX API         |
 //! | Clipboard          | arboard (via XWayland) | arboard       | arboard        | arboard        |
 
+pub mod autostart;
+pub mod clipboard;
 pub mod focus;
+pub mod hotkey;
+pub mod paste;
+pub mod window;
 
 /// Whether this is a Linux Wayland session (needs evdev/uinput instead of X11 APIs).
 pub fn is_wayland() -> bool {
