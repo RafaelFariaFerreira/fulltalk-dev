@@ -11,7 +11,10 @@
 
 pub mod chord;
 pub mod delivery;
+pub mod history;
 pub mod ports;
 pub mod session;
+pub mod settings;
 pub mod shortcut;
+pub mod store;
 pub mod text;
