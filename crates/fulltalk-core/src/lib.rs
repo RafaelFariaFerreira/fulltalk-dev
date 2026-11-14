@@ -9,3 +9,5 @@
 //! The OS-specific and model-specific adapters live in sibling crates and plug
 //! in through the traits defined in [`ports`].
 
+pub mod chord;
+pub mod shortcut;
