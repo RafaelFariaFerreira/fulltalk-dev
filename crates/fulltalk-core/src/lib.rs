@@ -10,4 +10,6 @@
 //! in through the traits defined in [`ports`].
 
 pub mod chord;
+pub mod session;
 pub mod shortcut;
+pub mod text;
