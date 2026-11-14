@@ -17,6 +17,9 @@ pub const MUTED: Color32 = Color32::from_rgb(0x6B, 0x6A, 0x80);
 pub const SUBTLE: Color32 = Color32::from_rgb(0x9A, 0x99, 0xAD);
 pub const DANGER: Color32 = Color32::from_rgb(0xE5, 0x48, 0x4D);
 pub const WARNING: Color32 = Color32::from_rgb(0xC2, 0x6B, 0x00);
+/// The minimized microphone while nothing is being recorded.
+pub const INACTIVE: Color32 = Color32::from_rgb(0x7D, 0x7C, 0x8E);
+pub const INACTIVE_HOVER: Color32 = Color32::from_rgb(0x6B, 0x6A, 0x80);
 
 pub const CARD_RADIUS: u8 = 18;
 /// Transparent margin around the card so its shadow is visible.
@@ -35,6 +38,7 @@ pub mod icon {
     pub const GEAR: &str = "\u{E270}";
     pub const INFO: &str = "\u{E2CE}";
     pub const MICROPHONE: &str = "\u{E326}";
+    pub const MINUS: &str = "\u{E32A}";
     pub const PENCIL_SIMPLE: &str = "\u{E3B4}";
     pub const ROCKET_LAUNCH: &str = "\u{E3FE}";
     pub const CLIPBOARD_TEXT: &str = "\u{E198}";

@@ -28,6 +28,9 @@ pub enum Input {
     ButtonClicked,
     HotkeyPressed,
     HotkeyReleased,
+    /// Throw away the recording in progress (the click that started it turned
+    /// out to be the first half of a double click).
+    Cancelled,
     /// The microphone could not be opened or failed mid-recording.
     CaptureFailed(String),
     /// The recording was too short or silent to be worth transcribing.
@@ -47,6 +50,8 @@ pub enum Effect {
     StartCapture,
     /// Stop the microphone and transcribe what was captured.
     FinishCapture,
+    /// Stop the microphone and drop what was captured.
+    DiscardCapture,
     /// Hand the final text to the delivery layer (clipboard / paste / history).
     Deliver(String),
     Notify(Notice),
@@ -68,7 +73,7 @@ impl Session {
 
     /// Applies an input and returns the effects the caller must run, in order.
     pub fn handle(&mut self, input: Input) -> Vec<Effect> {
-        use Effect::{Deliver, FinishCapture, Notify, StartCapture};
+        use Effect::{Deliver, DiscardCapture, FinishCapture, Notify, StartCapture};
         use State::{Idle, Recording, Transcribing};
 
         let (next, effects) = match (self.state, input) {
@@ -80,6 +85,9 @@ impl Session {
             | (Recording(Trigger::Hotkey), Input::HotkeyReleased) => {
                 (Transcribing, vec![FinishCapture])
             }
+
+            // Nothing to transcribe and nothing to say: it never happened.
+            (Recording(_), Input::Cancelled) => (Idle, vec![DiscardCapture]),
 
             (Recording(_), Input::CaptureFailed(reason))
             | (Transcribing, Input::TranscriptionFailed(reason)) => {
@@ -110,7 +118,7 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use Effect::{Deliver, FinishCapture, Notify, StartCapture};
+    use Effect::{Deliver, DiscardCapture, FinishCapture, Notify, StartCapture};
 
     fn session_in(state: State) -> Session {
         Session { state }
@@ -151,6 +159,36 @@ mod tests {
     fn button_can_stop_a_hotkey_recording() {
         let mut s = session_in(State::Recording(Trigger::Hotkey));
         assert_eq!(s.handle(Input::ButtonClicked), [FinishCapture]);
+    }
+
+    #[test]
+    fn cancelling_discards_the_recording_without_transcribing() {
+        for trigger in [Trigger::Button, Trigger::Hotkey] {
+            let mut s = session_in(State::Recording(trigger));
+            assert_eq!(s.handle(Input::Cancelled), [DiscardCapture]);
+            assert_eq!(s.state(), State::Idle);
+        }
+    }
+
+    #[test]
+    fn a_double_click_while_idle_leaves_no_trace() {
+        // The first click of a double click starts a recording; the second
+        // one cancels it instead of transcribing a fraction of a second.
+        let mut s = Session::new();
+        assert_eq!(s.handle(Input::ButtonClicked), [StartCapture]);
+        assert_eq!(s.handle(Input::Cancelled), [DiscardCapture]);
+        assert_eq!(s.state(), State::Idle);
+    }
+
+    #[test]
+    fn cancelling_does_not_touch_a_transcription_in_progress() {
+        // A double click on a running recording: the first click already
+        // stopped it, and its text must still arrive.
+        let mut s = session_in(State::Recording(Trigger::Button));
+        assert_eq!(s.handle(Input::ButtonClicked), [FinishCapture]);
+        assert!(s.handle(Input::Cancelled).is_empty());
+        assert_eq!(s.state(), State::Transcribing);
+        assert!(session_in(State::Idle).handle(Input::Cancelled).is_empty());
     }
 
     #[test]

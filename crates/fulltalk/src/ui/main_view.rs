@@ -5,6 +5,7 @@ use eframe::egui::{self, Align, Layout, RichText, Sense, Ui, vec2};
 use fulltalk_core::session::{Input, State, Trigger};
 
 use super::theme::{self, icon};
+use super::toast::{Toast, ToastKind};
 use super::widgets::{self, MicMode};
 use crate::app::{FulltalkApp, SLOGAN};
 use crate::workers::EngineStatus;
@@ -39,6 +40,34 @@ impl FulltalkApp {
         }
     }
 
+    /// The minimized window: only the microphone. A click toggles recording,
+    /// a double click brings the full window back, a drag moves it.
+    pub(crate) fn mini_view(&mut self, ui: &mut Ui) {
+        if self.toast.as_ref().is_some_and(Toast::expired) {
+            self.toast = None;
+        }
+        // No room for a toast here: trouble just turns the microphone amber.
+        let alert = matches!(self.engine_status, EngineStatus::Failed(_))
+            || self
+                .toast
+                .as_ref()
+                .is_some_and(|toast| matches!(toast.kind, ToastKind::Warning | ToastKind::Error));
+        let mode = self.mic_mode();
+        let bubble = widgets::mic_bubble(ui, mode, alert);
+        self.drag_main_window(ui.ctx(), &bubble);
+
+        if bubble.double_clicked() {
+            // The first click of the pair has already toggled recording.
+            // If it started one, drop it; if it stopped one, let that finish.
+            tracing::debug!(state = ?self.state(), "microphone double-clicked");
+            self.apply(Input::Cancelled);
+            self.set_minimized(ui.ctx(), false);
+        } else if bubble.clicked() && !matches!(mode, MicMode::Unavailable) {
+            tracing::debug!(state = ?self.state(), "microphone clicked");
+            self.apply(Input::ButtonClicked);
+        }
+    }
+
     fn header(&mut self, ui: &mut Ui) {
         let (drag, ()) = widgets::window_header(ui, |ui| {
             widgets::logo(ui, 22.0);
@@ -52,6 +81,9 @@ impl FulltalkApp {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if widgets::icon_button(ui, icon::X, "Fechar").clicked() {
                     self.quit(ui.ctx());
+                }
+                if widgets::icon_button(ui, icon::MINUS, "Minimizar").clicked() {
+                    self.set_minimized(ui.ctx(), true);
                 }
                 if widgets::icon_button(ui, icon::GEAR, "Configurações").clicked() {
                     self.settings_open = !self.settings_open;

@@ -193,6 +193,81 @@ pub fn mic_button(ui: &mut Ui, mode: MicMode) -> Response {
     }
 }
 
+/// The minimized app: just the microphone, filling its tiny window. Grey while
+/// idle, violet while recording or transcribing, amber when `alert` is set
+/// (something went wrong and there is no room to say what).
+///
+/// Senses clicks and drags over the whole window; the caller decides what a
+/// click, a double click and a drag mean.
+pub fn mic_bubble(ui: &mut Ui, mode: MicMode, alert: bool) -> Response {
+    let rect = ui.max_rect();
+    let response = ui.interact(
+        rect,
+        ui.scope_id().with("mic_bubble"),
+        Sense::click_and_drag(),
+    );
+    let painter = ui.painter_at(rect);
+    let c = rect.center();
+    let t = ui.input(|i| i.time) as f32;
+    let r = BUBBLE_RADIUS;
+    let hovered = response.hovered();
+
+    let circle = Rect::from_center_size(c, Vec2::splat(r * 2.0));
+    painter.add(
+        Shadow {
+            offset: [0, 2],
+            blur: 8,
+            spread: 0,
+            color: Color32::from_black_alpha(70),
+        }
+        .as_shape(circle, CornerRadius::same(r as u8)),
+    );
+
+    let active = matches!(mode, MicMode::Recording { .. } | MicMode::Busy);
+    if let MicMode::Recording { level } = mode {
+        // A halo that breathes with the voice.
+        let breathe = (t * 3.2).sin() * 0.5 + 0.5;
+        let halo = r + 2.5 + 3.5 * level + 1.5 * breathe;
+        painter.circle_filled(c, halo, theme::PRIMARY.gamma_multiply(0.35));
+    }
+    let fill = match (alert, active, hovered) {
+        (true, _, _) => theme::WARNING,
+        (false, true, false) => theme::PRIMARY,
+        (false, true, true) => theme::PRIMARY_HOVER,
+        (false, false, false) => theme::INACTIVE,
+        (false, false, true) => theme::INACTIVE_HOVER,
+    };
+    painter.circle_filled(c, r, fill);
+    painter.text(
+        c,
+        Align2::CENTER_CENTER,
+        if alert {
+            icon::WARNING_CIRCLE
+        } else {
+            icon::MICROPHONE
+        },
+        theme::icons(22.0),
+        Color32::WHITE,
+    );
+
+    // Progress rides just inside the rim, in white so it shows on any fill.
+    let rim = r - 3.5;
+    let white = Color32::from_white_alpha(230);
+    match mode {
+        MicMode::Busy => arc(&painter, c, rim, t * 4.0, 0.28, white),
+        MicMode::Preparing { progress: Some(p) } => {
+            arc(&painter, c, rim, -0.25, p.clamp(0.0, 1.0), white);
+        }
+        MicMode::Preparing { progress: None } => arc(&painter, c, rim, t * 2.0, 0.2, white),
+        _ => {}
+    }
+
+    response.on_hover_cursor(CursorIcon::PointingHand)
+}
+
+/// Radius of the minimized microphone.
+pub const BUBBLE_RADIUS: f32 = 22.0;
+
 /// Draws an arc starting at `start_turns` (fraction of a full turn) spanning `len_turns`.
 fn arc(painter: &egui::Painter, c: Pos2, r: f32, start_turns: f32, len_turns: f32, color: Color32) {
     let steps = 48;
@@ -428,6 +503,55 @@ mod tests {
     #[test]
     fn dragging_empty_header_space_drags_the_window() {
         assert!(perform(Gesture::Drag, Target::EmptySpace).drag_started);
+    }
+
+    /// Clicks the minimized microphone `clicks` times in quick succession.
+    /// Returns how many frames reported a click and a double click.
+    fn click_bubble(clicks: usize) -> (usize, usize) {
+        let ctx = Context::default();
+        theme::install(&ctx);
+        let at = pos2(32.0, 32.0);
+        let button = |pressed| Event::PointerButton {
+            pos: at,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        };
+        let mut script = vec![Vec::new(), vec![Event::PointerMoved(at)]];
+        for _ in 0..clicks {
+            script.push(vec![button(true)]);
+            script.push(vec![button(false)]);
+        }
+        script.push(Vec::new());
+
+        let (mut clicked, mut double_clicked) = (0, 0);
+        for (frame, events) in script.into_iter().enumerate() {
+            let input = RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::splat(64.0))),
+                time: Some(frame as f64 * 0.02),
+                events,
+                ..RawInput::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| {
+                let bubble = mic_bubble(ui, MicMode::Idle, false);
+                clicked += usize::from(bubble.clicked());
+                double_clicked += usize::from(bubble.double_clicked());
+            });
+            output.textures_delta.clear();
+        }
+        (clicked, double_clicked)
+    }
+
+    #[test]
+    fn bubble_reports_a_single_click() {
+        assert_eq!(click_bubble(1), (1, 0));
+    }
+
+    #[test]
+    fn bubble_reports_the_second_click_as_a_double_click() {
+        // The app relies on this shape: the first click acts at once, and the
+        // second one arrives flagged as a double click so it can be undone.
+        assert_eq!(click_bubble(2), (2, 1));
     }
 
     #[test]

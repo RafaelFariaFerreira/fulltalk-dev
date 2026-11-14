@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::shortcut::Shortcut;
 
+// Each flag is an independent preference the user flips on its own.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -15,6 +17,8 @@ pub struct Settings {
     pub launch_at_login: bool,
     /// Whether the recent transcriptions are expanded below the microphone.
     pub show_history: bool,
+    /// Whether the window is reduced to just the microphone, in a screen corner.
+    pub minimized: bool,
     /// Last window position (logical pixels), restored on start.
     pub window_position: Option<[f32; 2]>,
 }
@@ -26,6 +30,7 @@ impl Default for Settings {
             auto_paste: true,
             launch_at_login: false,
             show_history: false,
+            minimized: false,
             window_position: None,
         }
     }
@@ -47,6 +52,22 @@ mod tests {
     fn history_starts_collapsed() {
         // The window stays small; the clock button opens the list on demand.
         assert!(!Settings::default().show_history);
+    }
+
+    #[test]
+    fn starts_as_the_full_window() {
+        assert!(!Settings::default().minimized);
+    }
+
+    #[test]
+    fn minimized_mode_survives_a_round_trip() {
+        let mini = Settings {
+            minimized: true,
+            ..Settings::default()
+        };
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&mini).unwrap()).unwrap();
+        assert!(restored.minimized);
     }
 
     #[test]

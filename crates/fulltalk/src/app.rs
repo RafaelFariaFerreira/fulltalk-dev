@@ -52,14 +52,25 @@ const FLOATING_CHECK_INTERVAL: Duration = Duration::from_millis(500);
 /// microphone, or with the recent transcriptions expanded below it.
 const COMPACT_SIZE: [f32; 2] = [372.0, 372.0];
 const EXPANDED_SIZE: [f32; 2] = [372.0, 604.0];
+/// The minimized window: the microphone alone, with room for its halo.
+const MINI_SIZE: [f32; 2] = [64.0, 64.0];
+/// Gap between the minimized window and the screen corner.
+const MINI_MARGIN: f32 = 12.0;
 
-/// The main window size for the given history visibility.
-pub const fn window_size(show_history: bool) -> [f32; 2] {
-    if show_history {
-        EXPANDED_SIZE
-    } else {
-        COMPACT_SIZE
+/// The window size for the given mode.
+pub const fn window_size(settings: &Settings) -> [f32; 2] {
+    match (settings.minimized, settings.show_history) {
+        (true, _) => MINI_SIZE,
+        (false, true) => EXPANDED_SIZE,
+        (false, false) => COMPACT_SIZE,
     }
+}
+
+/// Top-left corner that puts a window of `size` in the top-right corner of
+/// `area` (`[x, y, width, height]`), `margin` away from its edges.
+fn top_right_corner(area: [f32; 4], size: [f32; 2], margin: f32) -> [f32; 2] {
+    let [x, y, width, _] = area;
+    [(x + width - size[0] - margin).max(x), y + margin]
 }
 
 pub struct FulltalkApp {
@@ -79,6 +90,8 @@ pub struct FulltalkApp {
     floating: Option<FloatingWindow>,
     floating_checked: Instant,
     window_drag: Option<WindowDrag>,
+    /// Whether a window that started minimized was already moved to its corner.
+    corner_placed: bool,
     #[cfg(feature = "screenshot")]
     shooter: Option<crate::screenshot::Shooter>,
 
@@ -152,6 +165,7 @@ impl FulltalkApp {
             floating,
             floating_checked: Instant::now(),
             window_drag: None,
+            corner_placed: false,
             #[cfg(feature = "screenshot")]
             shooter: crate::screenshot::Shooter::from_env(),
             hotkey_error,
@@ -214,6 +228,10 @@ impl FulltalkApp {
             match effect {
                 Effect::StartCapture => self.start_capture(),
                 Effect::FinishCapture => self.finish_capture(),
+                Effect::DiscardCapture => {
+                    self.recording_since = None;
+                    drop(self.recorder.stop());
+                }
                 Effect::Deliver(text) => self.deliver(text),
                 Effect::Notify(notice) => self.toast = Some(notice_toast(notice)),
             }
@@ -297,8 +315,58 @@ impl FulltalkApp {
         self.settings.show_history = visible;
         self.persist_settings();
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-            window_size(visible).into(),
+            window_size(&self.settings).into(),
         ));
+    }
+
+    /// Shrinks the window to the microphone in the top-right corner of the
+    /// screen, or brings the full window back to where it was.
+    pub(crate) fn set_minimized(&mut self, ctx: &egui::Context, minimized: bool) {
+        if minimized {
+            // Remember where the full window lives before it leaves.
+            if let Some(pos) = self.window_pos {
+                self.settings.window_position = Some([pos.x, pos.y]);
+            }
+            self.settings_open = false;
+            self.capturing_shortcut = false;
+        }
+        self.settings.minimized = minimized;
+        self.persist_settings();
+        self.window_drag = None;
+        self.place_window(ctx);
+    }
+
+    /// Applies the size and position of the current mode.
+    fn place_window(&self, ctx: &egui::Context) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+            window_size(&self.settings).into(),
+        ));
+        let position = if self.settings.minimized {
+            Some(self.screen_corner(ctx))
+        } else {
+            self.settings.window_position
+        };
+        if let Some([x, y]) = position {
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(x, y)));
+        }
+    }
+
+    /// Where the minimized window goes, in points: the top-right corner of
+    /// the work area (so it clears panels and docks), or of the monitor when
+    /// the platform does not report one.
+    fn screen_corner(&self, ctx: &egui::Context) -> [f32; 2] {
+        let scale = ctx.pixels_per_point();
+        let area = self
+            .floating
+            .as_ref()
+            .and_then(FloatingWindow::work_area)
+            .map(|area| area.map(|v| v as f32 / scale))
+            .or_else(|| {
+                ctx.input(|i| i.viewport().monitor_size)
+                    .map(|size| [0.0, 0.0, size.x, size.y])
+            })
+            .unwrap_or([0.0, 0.0, 1280.0, 720.0]);
+        top_right_corner(area, MINI_SIZE, MINI_MARGIN)
     }
 
     pub(crate) fn set_launch_at_login(&mut self, enabled: bool) {
@@ -334,7 +402,8 @@ impl FulltalkApp {
 
     /// Saves the window position and quits.
     pub(crate) fn quit(&mut self, ctx: &egui::Context) {
-        if let Some(pos) = self.window_pos {
+        // While minimized the saved position stays that of the full window.
+        if let Some(pos) = self.window_pos.filter(|_| !self.settings.minimized) {
             self.settings.window_position = Some([pos.x, pos.y]);
             self.persist_settings();
         }
@@ -432,9 +501,18 @@ impl FulltalkApp {
             }
             Scene::History if !self.settings.show_history => {
                 self.settings.show_history = true; // not persisted: demo profile
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(window_size(true).into()));
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                    window_size(&self.settings).into(),
+                ));
             }
-            Scene::Recording if ready && self.state() == State::Idle => {
+            Scene::Mini | Scene::MiniRecording if !self.settings.minimized => {
+                self.settings.minimized = true; // not persisted: demo profile
+                self.corner_placed = true; // stay put, the capture is all that matters
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                    window_size(&self.settings).into(),
+                ));
+            }
+            Scene::Recording | Scene::MiniRecording if ready && self.state() == State::Idle => {
                 self.apply(Input::ButtonClicked);
             }
             Scene::Toast if ready && self.toast.is_none() => {
@@ -473,9 +551,18 @@ impl eframe::App for FulltalkApp {
             return;
         }
 
-        self.main_view(ui);
-        if self.settings_open {
-            self.settings_viewport(ui.ctx());
+        if self.settings.minimized {
+            // A window that starts minimized still has to be sent to its corner.
+            if !self.corner_placed {
+                self.corner_placed = true;
+                self.place_window(ui.ctx());
+            }
+            self.mini_view(ui);
+        } else {
+            self.main_view(ui);
+            if self.settings_open {
+                self.settings_viewport(ui.ctx());
+            }
         }
 
         if self.animating() {
@@ -548,6 +635,30 @@ fn floating_window(cc: &eframe::CreationContext<'_>) -> Option<FloatingWindow> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_size_follows_the_mode() {
+        let mut settings = Settings::default();
+        assert_eq!(window_size(&settings), COMPACT_SIZE);
+        settings.show_history = true;
+        assert_eq!(window_size(&settings), EXPANDED_SIZE);
+        // Minimized wins: the history is not shown there.
+        settings.minimized = true;
+        assert_eq!(window_size(&settings), MINI_SIZE);
+    }
+
+    #[test]
+    fn minimized_window_sits_in_the_top_right_of_the_work_area() {
+        // A 1920x1080 screen with a 32 px top bar and a 67 px dock on the left.
+        let corner = top_right_corner([67.0, 32.0, 1853.0, 1048.0], [64.0, 64.0], 12.0);
+        assert_eq!(corner, [1844.0, 44.0]);
+    }
+
+    #[test]
+    fn minimized_window_never_leaves_a_tiny_work_area() {
+        let corner = top_right_corner([100.0, 0.0, 50.0, 50.0], [64.0, 64.0], 12.0);
+        assert_eq!(corner, [100.0, 12.0]);
+    }
 
     #[test]
     fn dragged_window_follows_the_pointer() {

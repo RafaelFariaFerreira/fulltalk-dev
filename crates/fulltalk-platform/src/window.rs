@@ -70,6 +70,19 @@ impl FloatingWindow {
         }
     }
 
+    /// The part of the screen not covered by panels and docks, as
+    /// `[x, y, width, height]` in physical pixels, when the platform reports it.
+    pub fn work_area(&self) -> Option<[i32; 4]> {
+        #[cfg(target_os = "linux")]
+        {
+            self.x11.as_ref().and_then(x11::Hints::work_area)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            None
+        }
+    }
+
     /// Re-applies whatever the window manager is missing. Cheap (two X11 round
     /// trips), so the app calls it now and then while it is painting anyway.
     pub fn enforce(&self) {
@@ -103,6 +116,7 @@ mod x11 {
         root: u32,
         net_wm_state: u32,
         above: u32,
+        workarea: u32,
     }
 
     impl std::fmt::Debug for Hints {
@@ -126,12 +140,14 @@ mod x11 {
                     .atom)
             };
             let (net_wm_state, above) = (atom(b"_NET_WM_STATE")?, atom(b"_NET_WM_STATE_ABOVE")?);
+            let workarea = atom(b"_NET_WORKAREA")?;
             Ok(Self {
                 conn,
                 window,
                 root,
                 net_wm_state,
                 above,
+                workarea,
             })
         }
 
@@ -147,6 +163,21 @@ mod x11 {
                 );
             }
             Ok(())
+        }
+
+        /// `_NET_WORKAREA` of the current desktop.
+        pub(super) fn work_area(&self) -> Option<[i32; 4]> {
+            let reply = self
+                .conn
+                .get_property(false, self.root, self.workarea, AtomEnum::CARDINAL, 0, 4)
+                .ok()?
+                .reply()
+                .ok()?;
+            let values: Vec<i32> = reply
+                .value32()?
+                .filter_map(|v| i32::try_from(v).ok())
+                .collect();
+            <[i32; 4]>::try_from(values).ok()
         }
 
         /// The pointer in root-window coordinates.

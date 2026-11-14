@@ -44,13 +44,14 @@ fn main() -> anyhow::Result<()> {
     let mut viewport = ViewportBuilder::default()
         .with_title(APP_NAME)
         .with_app_id("fulltalk")
-        .with_inner_size(window_size(settings.show_history))
+        .with_inner_size(window_size(&settings))
         .with_resizable(false)
         .with_decorations(false)
         .with_transparent(true)
         .with_always_on_top()
         .with_icon(ui::icon::icon_data(128));
-    if let Some([x, y]) = settings.window_position {
+    // A minimized window is sent to its screen corner on the first frame.
+    if let Some([x, y]) = settings.window_position.filter(|_| !settings.minimized) {
         viewport = viewport.with_position([x, y]);
     }
 

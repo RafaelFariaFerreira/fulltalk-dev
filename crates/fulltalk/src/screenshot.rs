@@ -8,7 +8,7 @@
 //!
 //! * `FULLTALK_SCREENSHOT` — output path (required).
 //! * `FULLTALK_SCREENSHOT_SCENE` — `main` (default), `history`, `settings`,
-//!   `recording` or `toast`.
+//!   `recording`, `toast`, `mini` or `mini-recording`.
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -26,6 +26,9 @@ pub enum Scene {
     Settings,
     Recording,
     Toast,
+    /// The minimized window: just the microphone.
+    Mini,
+    MiniRecording,
 }
 
 #[derive(Debug)]
@@ -44,6 +47,8 @@ impl Shooter {
             Ok("settings") => Scene::Settings,
             Ok("recording") => Scene::Recording,
             Ok("toast") => Scene::Toast,
+            Ok("mini") => Scene::Mini,
+            Ok("mini-recording") => Scene::MiniRecording,
             _ => Scene::Main,
         };
         Some(Self {
