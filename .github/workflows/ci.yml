@@ -42,7 +42,44 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: System dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config desktop-file-utils
       - run: cargo test --workspace --locked
       - name: Build release binary
         run: cargo build --release -p fulltalk --locked
+
+      # The installers are what the README tells people to run, so run them too.
+      - name: Install as a desktop app (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          scripts/install-linux.sh
+          test -x "$HOME/.local/bin/fulltalk"
+          test -f "$HOME/.local/share/icons/hicolor/scalable/apps/fulltalk.svg"
+          desktop-file-validate "$HOME/.local/share/applications/fulltalk.desktop"
+          scripts/install-linux.sh --uninstall
+          test ! -e "$HOME/.local/share/applications/fulltalk.desktop"
+      - name: Install as a desktop app (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          scripts/install-macos.sh
+          app="/Applications/fulltalk dev.app"
+          [ -d "$app" ] || app="$HOME/Applications/fulltalk dev.app"
+          plutil -lint "$app/Contents/Info.plist"
+          test -x "$app/Contents/MacOS/fulltalk"
+          test -f "$app/Contents/Resources/fulltalk.icns"
+          codesign --verify --strict "$app"
+          scripts/install-macos.sh --uninstall
+          test ! -e "$app"
+      - name: Install as a desktop app (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/install-windows.ps1 -Desktop
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\fulltalk dev'
+          $link = Join-Path ([Environment]::GetFolderPath('Programs')) 'fulltalk dev.lnk'
+          foreach ($path in "$dir\fulltalk.exe", "$dir\fulltalk.ico", $link) {
+            if (-not (Test-Path $path)) { throw "missing after install: $path" }
+          }
+          $target = (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath
+          if ($target -ne "$dir\fulltalk.exe") { throw "shortcut points to $target" }
+          ./scripts/install-windows.ps1 -Uninstall
+          if (Test-Path $link) { throw 'shortcut left behind after uninstall' }
