@@ -1,0 +1,35 @@
+[package]
+name = "fulltalk"
+description = "fulltalk dev — local push-to-talk dictation. Code is cheap, show me the talk."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+default-run = "fulltalk"
+
+[dependencies]
+fulltalk-core.workspace = true
+fulltalk-asr.workspace = true
+fulltalk-platform.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+cpal = "0.18"
+directories = "6"
+eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts", "x11", "wayland"] }
+raw-window-handle = "0.6"
+png = { version = "0.18", optional = true }
+
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Same version eframe uses; only needed to force the X11 backend.
+winit = { version = "0.30", default-features = false, features = ["x11"] }
+libc = "0.2"
+
+[features]
+# Developer tool to render README screenshots (see src/screenshot.rs).
+screenshot = ["dep:png"]
+
+[lints]
+workspace = true
