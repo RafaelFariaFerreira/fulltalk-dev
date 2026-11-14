@@ -14,6 +14,7 @@ use fulltalk_core::shortcut::Shortcut;
 use fulltalk_core::store;
 use fulltalk_platform::autostart::Autostart;
 use fulltalk_platform::hotkey::{HotkeyError, HotkeyEvent, HotkeyService};
+use fulltalk_platform::window::FloatingWindow;
 
 use crate::audio::Recorder;
 use crate::paths::Paths;
@@ -23,6 +24,43 @@ use crate::workers::{AppEvent, Deliverer, DeliveryJob, Engine, EngineStatus, Not
 pub const APP_NAME: &str = "fulltalk dev";
 pub const SLOGAN: &str = "code is cheap, show me the talk";
 pub const REPO_URL: &str = "https://github.com/RafaelFariaFerreira/fulltalk-dev";
+
+/// A window move in progress: where the pointer and the window's top-left
+/// corner were when it started, both in physical screen pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct WindowDrag {
+    pointer: (i32, i32),
+    window: [f32; 2],
+}
+
+impl WindowDrag {
+    /// Where the window's corner belongs now that the pointer is at `pointer`.
+    /// Anchored to the start of the drag, so lag in the window actually
+    /// moving never feeds back into the result.
+    fn window_at(self, pointer: (i32, i32)) -> [f32; 2] {
+        [
+            self.window[0] + (pointer.0 - self.pointer.0) as f32,
+            self.window[1] + (pointer.1 - self.pointer.1) as f32,
+        ]
+    }
+}
+
+/// How often a painting app re-checks its floating window hints.
+const FLOATING_CHECK_INTERVAL: Duration = Duration::from_millis(500);
+
+/// Main window sizes, including the transparent shadow margin: just the
+/// microphone, or with the recent transcriptions expanded below it.
+const COMPACT_SIZE: [f32; 2] = [372.0, 372.0];
+const EXPANDED_SIZE: [f32; 2] = [372.0, 604.0];
+
+/// The main window size for the given history visibility.
+pub const fn window_size(show_history: bool) -> [f32; 2] {
+    if show_history {
+        EXPANDED_SIZE
+    } else {
+        COMPACT_SIZE
+    }
+}
 
 pub struct FulltalkApp {
     pub(crate) session: Session,
@@ -38,6 +76,9 @@ pub struct FulltalkApp {
     pub(crate) recording_since: Option<Instant>,
     pub(crate) autostart: Option<Autostart>,
     pub(crate) window_pos: Option<egui::Pos2>,
+    floating: Option<FloatingWindow>,
+    floating_checked: Instant,
+    window_drag: Option<WindowDrag>,
     #[cfg(feature = "screenshot")]
     shooter: Option<crate::screenshot::Shooter>,
 
@@ -66,7 +107,7 @@ impl FulltalkApp {
         history: History,
     ) -> Self {
         crate::ui::theme::install(&cc.egui_ctx);
-        make_window_non_activating(cc);
+        let floating = floating_window(cc);
 
         let (notify, events) = Notifier::new(cc.egui_ctx.clone());
 
@@ -108,6 +149,9 @@ impl FulltalkApp {
             copied: None,
             recording_since: None,
             window_pos: None,
+            floating,
+            floating_checked: Instant::now(),
+            window_drag: None,
             #[cfg(feature = "screenshot")]
             shooter: crate::screenshot::Shooter::from_env(),
             hotkey_error,
@@ -248,6 +292,15 @@ impl FulltalkApp {
         }
     }
 
+    /// Expands or collapses the recent transcriptions, resizing the window to fit.
+    pub(crate) fn set_history_visible(&mut self, ctx: &egui::Context, visible: bool) {
+        self.settings.show_history = visible;
+        self.persist_settings();
+        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+            window_size(visible).into(),
+        ));
+    }
+
     pub(crate) fn set_launch_at_login(&mut self, enabled: bool) {
         let result = self.autostart.as_ref().map_or(Ok(()), |a| {
             a.set_enabled(enabled).map_err(|e| e.to_string())
@@ -288,6 +341,68 @@ impl FulltalkApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
+    /// Moves the main window while its header is dragged.
+    ///
+    /// The window never takes focus, and the toolkit only asks the window
+    /// manager to move a window that has it. So the window follows the
+    /// pointer's position on the screen instead. Where the platform cannot
+    /// report that position, the window manager's move is the fallback.
+    pub(crate) fn drag_main_window(&mut self, ctx: &egui::Context, header: &egui::Response) {
+        if !header.dragged() {
+            self.window_drag = None;
+            return;
+        }
+        let pointer = self
+            .floating
+            .as_ref()
+            .and_then(FloatingWindow::pointer_position);
+        let scale = ctx.pixels_per_point();
+        if header.drag_started() {
+            let window = ctx.input(|i| i.viewport().outer_rect.map(|r| r.min));
+            // A drag is only recognised after the pointer has travelled a few
+            // points. Anchor to where it went down, so the spot that was
+            // grabbed stays under the pointer.
+            let travelled =
+                ctx.input(
+                    |i| match (i.pointer.press_origin(), i.pointer.latest_pos()) {
+                        (Some(origin), Some(now)) => (now - origin) * scale,
+                        _ => egui::Vec2::ZERO,
+                    },
+                );
+            match (pointer, window) {
+                (Some(pointer), Some(window)) => {
+                    self.window_drag = Some(WindowDrag {
+                        pointer: (
+                            pointer.0 - travelled.x.round() as i32,
+                            pointer.1 - travelled.y.round() as i32,
+                        ),
+                        window: [window.x * scale, window.y * scale],
+                    });
+                }
+                _ => ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag),
+            }
+        }
+        if let (Some(drag), Some(pointer)) = (self.window_drag, pointer) {
+            let [x, y] = drag.window_at(pointer);
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(
+                x / scale,
+                y / scale,
+            )));
+        }
+    }
+
+    /// Re-asserts "always on top, never focused" now and then. The first
+    /// checks matter most: the window only becomes visible after its first
+    /// frame, and that is when the window manager starts listening.
+    fn keep_floating(&mut self) {
+        if self.floating_checked.elapsed() >= FLOATING_CHECK_INTERVAL
+            && let Some(floating) = &self.floating
+        {
+            floating.enforce();
+            self.floating_checked = Instant::now();
+        }
+    }
+
     /// Whether something on screen is animating and needs frames.
     pub(crate) fn animating(&self) -> bool {
         matches!(self.state(), State::Recording(_) | State::Transcribing)
@@ -314,6 +429,10 @@ impl FulltalkApp {
                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
                     crate::ui::SETTINGS_SIZE.into(),
                 ));
+            }
+            Scene::History if !self.settings.show_history => {
+                self.settings.show_history = true; // not persisted: demo profile
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(window_size(true).into()));
             }
             Scene::Recording if ready && self.state() == State::Idle => {
                 self.apply(Input::ButtonClicked);
@@ -347,6 +466,7 @@ impl eframe::App for FulltalkApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.pump_events();
         self.window_pos = ui.ctx().input(|i| i.viewport().outer_rect.map(|r| r.min));
+        self.keep_floating();
 
         #[cfg(feature = "screenshot")]
         if self.screenshot_tick(ui) {
@@ -417,10 +537,39 @@ fn unix_now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-fn make_window_non_activating(cc: &eframe::CreationContext<'_>) {
+fn floating_window(cc: &eframe::CreationContext<'_>) -> Option<FloatingWindow> {
     use raw_window_handle::HasWindowHandle;
-    match cc.window_handle() {
-        Ok(handle) => fulltalk_platform::window::make_non_activating(handle.as_raw()),
-        Err(err) => tracing::warn!(%err, "no window handle"),
+    cc.window_handle()
+        .inspect_err(|err| tracing::warn!(%err, "no window handle"))
+        .ok()
+        .map(|handle| FloatingWindow::new(handle.as_raw()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dragged_window_follows_the_pointer() {
+        let drag = WindowDrag {
+            pointer: (816, 203),
+            window: [636.0, 162.0],
+        };
+        assert_eq!(drag.window_at((816, 203)), [636.0, 162.0]);
+        assert_eq!(drag.window_at((936, 263)), [756.0, 222.0]);
+        assert_eq!(drag.window_at((716, 103)), [536.0, 62.0]);
+    }
+
+    #[test]
+    fn dragged_window_position_does_not_drift() {
+        // Each position derives from where the drag started, so revisiting a
+        // pointer position always lands the window on the same spot.
+        let drag = WindowDrag {
+            pointer: (100, 100),
+            window: [10.0, 20.0],
+        };
+        let there = drag.window_at((400, 50));
+        let _ = drag.window_at((-30, 900));
+        assert_eq!(drag.window_at((400, 50)), there);
     }
 }

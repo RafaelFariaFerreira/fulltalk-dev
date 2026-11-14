@@ -34,19 +34,66 @@ pub fn section() -> Frame {
         .inner_margin(Margin::symmetric(14, 12))
 }
 
+/// Side of the square icon buttons, and so the height of a window header.
+pub const ICON_BUTTON_SIZE: f32 = 30.0;
+
+/// A window header row. Returns the response of its drag area (everything
+/// but the buttons) next to whatever `add_contents` returns; the caller moves
+/// the window while that response is dragged.
+pub fn window_header<R>(ui: &mut Ui, add_contents: impl FnOnce(&mut Ui) -> R) -> (Response, R) {
+    // The drag area is registered *before* the row's widgets. egui gives a
+    // click only to the top-most widget under the pointer, so a drag area
+    // added after the buttons would sit on top of them and swallow their clicks.
+    //
+    // It senses clicks as well as drags on purpose: a drag-only widget is
+    // considered dragged the moment the pointer goes down, which would start
+    // moving the window on every button press. Sensing both makes egui wait
+    // until the pointer has really moved.
+    let rect = Rect::from_min_size(
+        ui.cursor().min,
+        vec2(ui.available_width(), ICON_BUTTON_SIZE),
+    );
+    let drag = ui.interact(
+        rect,
+        ui.scope_id().with("window_drag"),
+        Sense::click_and_drag(),
+    );
+    let inner = ui
+        .horizontal(|ui| {
+            // Selectable text takes a drag for itself (to select it), and the
+            // title is exactly where people grab a window.
+            ui.style_mut().interaction.selectable_labels = false;
+            add_contents(ui)
+        })
+        .inner;
+    (drag, inner)
+}
+
 /// Square icon button with a hover background.
 pub fn icon_button(ui: &mut Ui, glyph: &str, tooltip: &str) -> Response {
-    let (rect, response) = ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
+    icon_toggle(ui, glyph, tooltip, false)
+}
+
+/// An icon button that stays highlighted while what it controls is open.
+pub fn icon_toggle(ui: &mut Ui, glyph: &str, tooltip: &str, active: bool) -> Response {
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(ICON_BUTTON_SIZE), Sense::click());
     let hovered = response.hovered();
-    if hovered {
+    if active {
+        ui.painter().rect_filled(rect, 8, theme::PRIMARY_SOFT);
+    } else if hovered {
         ui.painter().rect_filled(rect, 8, theme::ROW_HOVER);
     }
+    let color = match (active, hovered) {
+        (true, _) => theme::PRIMARY,
+        (false, true) => theme::TEXT,
+        (false, false) => theme::MUTED,
+    };
     ui.painter().text(
         rect.center(),
         Align2::CENTER_CENTER,
         glyph,
         theme::icons(19.0),
-        if hovered { theme::TEXT } else { theme::MUTED },
+        color,
     );
     response
         .on_hover_cursor(CursorIcon::PointingHand)
@@ -276,4 +323,115 @@ pub fn divider(ui: &mut Ui) {
     let width = ui.available_width();
     let (rect, _) = ui.allocate_exact_size(vec2(width, 1.0), Sense::hover());
     ui.painter().rect_filled(rect, 0, theme::BORDER);
+}
+
+#[cfg(test)]
+mod tests {
+    use eframe::egui::{Context, Event, Modifiers, PointerButton, RawInput};
+
+    use super::*;
+
+    #[derive(Debug, Clone, Copy)]
+    enum Gesture {
+        Click,
+        Drag,
+    }
+
+    /// What the header saw during a gesture.
+    #[derive(Debug, Default)]
+    struct Outcome {
+        button_clicked: bool,
+        drag_started: bool,
+    }
+
+    /// Which part of the header the gesture happens on.
+    #[derive(Debug, Clone, Copy)]
+    enum Target {
+        Title,
+        EmptySpace,
+        Button,
+    }
+
+    /// Lays out a header like the app's (title on the left, a button on the
+    /// right) headlessly and performs `gesture` on `target`.
+    fn perform(gesture: Gesture, target: Target) -> Outcome {
+        let ctx = Context::default();
+        theme::install(&ctx);
+        let mut at = Pos2::ZERO;
+        let mut outcome = Outcome::default();
+        let button = |pos, pressed| Event::PointerButton {
+            pos,
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        };
+        // Lay out, move the pointer there, press, (drag away,) release, settle.
+        for step in 0..6 {
+            let away = at + vec2(24.0, 0.0);
+            let events = match (step, gesture) {
+                (1, _) => vec![Event::PointerMoved(at)],
+                (2, _) => vec![button(at, true)],
+                (3, Gesture::Drag) => vec![Event::PointerMoved(away)],
+                (4, Gesture::Click) => vec![button(at, false)],
+                (4, Gesture::Drag) => vec![button(away, false)],
+                _ => Vec::new(),
+            };
+            let input = RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(372.0, 200.0))),
+                events,
+                ..RawInput::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| {
+                let (drag, (title, gap, toggle)) = window_header(ui, |ui| {
+                    let title = ui.label("fulltalk dev").rect;
+                    let gap = Rect::from_min_size(ui.cursor().min, Vec2::splat(ICON_BUTTON_SIZE));
+                    let toggle = ui
+                        .with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            icon_toggle(ui, icon::CLOCK_COUNTER_CLOCKWISE, "Histórico", false)
+                        })
+                        .inner;
+                    (title, gap, toggle)
+                });
+                at = match target {
+                    Target::Title => title.center(),
+                    Target::EmptySpace => gap.center(),
+                    Target::Button => toggle.rect.center(),
+                };
+                outcome.button_clicked |= toggle.clicked();
+                outcome.drag_started |= drag.drag_started();
+            });
+            output.textures_delta.clear(); // nothing is rendered here
+        }
+        outcome
+    }
+
+    #[test]
+    fn header_buttons_are_clickable() {
+        // Regression: the drag area used to be registered after the buttons,
+        // which left only their outer edge clickable.
+        assert!(perform(Gesture::Click, Target::Button).button_clicked);
+    }
+
+    #[test]
+    fn pressing_a_header_button_does_not_drag_the_window() {
+        // Regression: a drag-only area starts dragging on press, so every
+        // button press also started moving the window.
+        assert!(!perform(Gesture::Click, Target::Button).drag_started);
+    }
+
+    #[test]
+    fn dragging_the_header_title_drags_the_window() {
+        // Regression: selectable title text kept the drag to itself.
+        assert!(perform(Gesture::Drag, Target::Title).drag_started);
+    }
+
+    #[test]
+    fn dragging_empty_header_space_drags_the_window() {
+        assert!(perform(Gesture::Drag, Target::EmptySpace).drag_started);
+    }
+
+    #[test]
+    fn clicking_the_header_does_not_drag_the_window() {
+        assert!(!perform(Gesture::Click, Target::Title).drag_started);
+    }
 }

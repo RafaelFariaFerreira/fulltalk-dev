@@ -13,6 +13,8 @@ pub struct Settings {
     pub auto_paste: bool,
     /// Start fulltalk dev when the user logs in.
     pub launch_at_login: bool,
+    /// Whether the recent transcriptions are expanded below the microphone.
+    pub show_history: bool,
     /// Last window position (logical pixels), restored on start.
     pub window_position: Option<[f32; 2]>,
 }
@@ -23,6 +25,7 @@ impl Default for Settings {
             shortcut: Shortcut::default(),
             auto_paste: true,
             launch_at_login: false,
+            show_history: false,
             window_position: None,
         }
     }
@@ -38,6 +41,23 @@ mod tests {
         assert_eq!(s.shortcut.to_string(), "Alt+S");
         assert!(s.auto_paste);
         assert!(!s.launch_at_login);
+    }
+
+    #[test]
+    fn history_starts_collapsed() {
+        // The window stays small; the clock button opens the list on demand.
+        assert!(!Settings::default().show_history);
+    }
+
+    #[test]
+    fn history_visibility_survives_a_round_trip() {
+        let open = Settings {
+            show_history: true,
+            ..Settings::default()
+        };
+        let restored: Settings =
+            serde_json::from_str(&serde_json::to_string(&open).unwrap()).unwrap();
+        assert!(restored.show_history);
     }
 
     #[test]

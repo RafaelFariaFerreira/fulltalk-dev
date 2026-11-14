@@ -1,4 +1,5 @@
-//! The floating main window: header, mic button, status, shortcut hint, history.
+//! The floating main window: header, mic button, status, shortcut hint and,
+//! when the clock button is on, the recent transcriptions.
 
 use eframe::egui::{self, Align, Layout, RichText, Sense, Ui, vec2};
 use fulltalk_core::session::{Input, State, Trigger};
@@ -15,10 +16,12 @@ impl FulltalkApp {
             self.header(ui);
             ui.add_space(6.0);
             self.hero(ui);
-            ui.add_space(14.0);
-            widgets::divider(ui);
-            ui.add_space(10.0);
-            self.history_list(ui);
+            if self.settings.show_history {
+                ui.add_space(14.0);
+                widgets::divider(ui);
+                ui.add_space(10.0);
+                self.history_list(ui);
+            }
             ui.with_layout(Layout::bottom_up(Align::Center), |ui| {
                 ui.label(
                     RichText::new(SLOGAN)
@@ -37,7 +40,7 @@ impl FulltalkApp {
     }
 
     fn header(&mut self, ui: &mut Ui) {
-        let row = ui.horizontal(|ui| {
+        let (drag, ()) = widgets::window_header(ui, |ui| {
             widgets::logo(ui, 22.0);
             ui.add_space(4.0);
             ui.label(RichText::new("fulltalk").font(theme::semibold(16.0)));
@@ -53,13 +56,19 @@ impl FulltalkApp {
                 if widgets::icon_button(ui, icon::GEAR, "Configurações").clicked() {
                     self.settings_open = !self.settings_open;
                 }
+                let open = self.settings.show_history;
+                let tooltip = if open {
+                    "Ocultar últimas transcrições"
+                } else {
+                    "Mostrar últimas transcrições"
+                };
+                if widgets::icon_toggle(ui, icon::CLOCK_COUNTER_CLOCKWISE, tooltip, open).clicked()
+                {
+                    self.set_history_visible(ui.ctx(), !open);
+                }
             });
         });
-        // The whole header (minus buttons, which consumed their clicks) drags the window.
-        let drag = ui.interact(row.response.rect, ui.scope_id().with("drag"), Sense::drag());
-        if drag.drag_started() {
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-        }
+        self.drag_main_window(ui.ctx(), &drag);
     }
 
     fn hero(&mut self, ui: &mut Ui) {
@@ -71,6 +80,7 @@ impl FulltalkApp {
                 _ => "Clique para falar",
             });
             if response.clicked() && !matches!(mode, MicMode::Unavailable) {
+                tracing::debug!(state = ?self.state(), "microphone clicked");
                 self.apply(Input::ButtonClicked);
             }
             ui.add_space(2.0);
@@ -124,27 +134,39 @@ impl FulltalkApp {
             return;
         }
         let labels = self.settings.shortcut.labels();
-        egui::Frame::new()
-            .fill(theme::SURFACE_ALT)
-            .corner_radius(20)
-            .inner_margin(egui::Margin::symmetric(14, 7))
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
-                    widgets::logo(ui, 13.0);
-                    ui.label(
-                        RichText::new("Segure")
-                            .font(theme::regular(12.5))
-                            .color(theme::MUTED),
-                    );
-                    widgets::shortcut_caps(ui, &labels, false);
-                    ui.label(
-                        RichText::new("para falar")
-                            .font(theme::regular(12.5))
-                            .color(theme::MUTED),
-                    );
+        // A frame is only as wide as its content, which is known after it is
+        // laid out, so the pill is centred with the width of the last frame.
+        let width_id = ui.scope_id().with("shortcut_hint_width");
+        let last_width: f32 = ui.ctx().data(|d| d.get_temp(width_id)).unwrap_or(0.0);
+        ui.horizontal(|ui| {
+            ui.add_space(((ui.available_width() - last_width) / 2.0).max(0.0));
+            let pill = egui::Frame::new()
+                .fill(theme::SURFACE_ALT)
+                .corner_radius(20)
+                .inner_margin(egui::Margin::symmetric(14, 7))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        widgets::logo(ui, 13.0);
+                        ui.label(
+                            RichText::new("Segure")
+                                .font(theme::regular(12.5))
+                                .color(theme::MUTED),
+                        );
+                        widgets::shortcut_caps(ui, &labels, false);
+                        ui.label(
+                            RichText::new("para falar")
+                                .font(theme::regular(12.5))
+                                .color(theme::MUTED),
+                        );
+                    });
                 });
-            });
+            let width = pill.response.rect.width();
+            if (width - last_width).abs() > 0.5 {
+                ui.ctx().data_mut(|d| d.insert_temp(width_id, width));
+                ui.ctx().request_repaint();
+            }
+        });
     }
 
     fn history_list(&mut self, ui: &mut Ui) {

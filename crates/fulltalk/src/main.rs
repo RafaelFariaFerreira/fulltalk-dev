@@ -25,11 +25,8 @@ use fulltalk_core::history::History;
 use fulltalk_core::settings::Settings;
 use fulltalk_core::store;
 
-use crate::app::{APP_NAME, FulltalkApp};
+use crate::app::{APP_NAME, FulltalkApp, window_size};
 use crate::paths::Paths;
-
-/// Main window size, including the transparent shadow margin.
-const WINDOW_SIZE: [f32; 2] = [372.0, 604.0];
 
 fn main() -> anyhow::Result<()> {
     memory::tune_allocator();
@@ -47,7 +44,7 @@ fn main() -> anyhow::Result<()> {
     let mut viewport = ViewportBuilder::default()
         .with_title(APP_NAME)
         .with_app_id("fulltalk")
-        .with_inner_size(WINDOW_SIZE)
+        .with_inner_size(window_size(settings.show_history))
         .with_resizable(false)
         .with_decorations(false)
         .with_transparent(true)

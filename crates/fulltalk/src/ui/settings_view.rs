@@ -1,6 +1,6 @@
 //! The settings window (a separate, focusable viewport so it can capture keys).
 
-use eframe::egui::{self, Align, Layout, RichText, Sense, Ui, ViewportBuilder, ViewportId, vec2};
+use eframe::egui::{self, Align, Layout, RichText, Ui, ViewportBuilder, ViewportId, vec2};
 
 use super::theme::{self, icon};
 use super::widgets;
@@ -45,7 +45,7 @@ impl FulltalkApp {
     }
 
     pub(crate) fn settings_content(&mut self, ui: &mut Ui) {
-        let header = ui.horizontal(|ui| {
+        let (drag, ()) = widgets::window_header(ui, |ui| {
             ui.label(RichText::new(icon::GEAR).font(theme::icons(21.0)));
             ui.label(RichText::new("Configurações").font(theme::semibold(16.0)));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -55,11 +55,7 @@ impl FulltalkApp {
                 }
             });
         });
-        let drag = ui.interact(
-            header.response.rect,
-            ui.scope_id().with("drag"),
-            Sense::drag(),
-        );
+        // Unlike the main window this one takes focus, so the window manager moves it.
         if drag.drag_started() {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
         }

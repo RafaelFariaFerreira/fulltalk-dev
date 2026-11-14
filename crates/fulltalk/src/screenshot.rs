@@ -7,7 +7,8 @@
 //! ```
 //!
 //! * `FULLTALK_SCREENSHOT` — output path (required).
-//! * `FULLTALK_SCREENSHOT_SCENE` — `main` (default), `settings`, `recording` or `toast`.
+//! * `FULLTALK_SCREENSHOT_SCENE` — `main` (default), `history`, `settings`,
+//!   `recording` or `toast`.
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -20,6 +21,8 @@ use eframe::egui::{self, ColorImage, ViewportCommand, ViewportId};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scene {
     Main,
+    /// The main window with the recent transcriptions expanded.
+    History,
     Settings,
     Recording,
     Toast,
@@ -37,6 +40,7 @@ impl Shooter {
     pub fn from_env() -> Option<Self> {
         let path = PathBuf::from(std::env::var_os("FULLTALK_SCREENSHOT")?);
         let scene = match std::env::var("FULLTALK_SCREENSHOT_SCENE").as_deref() {
+            Ok("history") => Scene::History,
             Ok("settings") => Scene::Settings,
             Ok("recording") => Scene::Recording,
             Ok("toast") => Scene::Toast,
