@@ -1,0 +1,22 @@
+[package]
+name = "fulltalk-core"
+description = "Pure domain logic for fulltalk dev: shortcuts, session state machine, history, delivery policy and audio DSP."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+rstest.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

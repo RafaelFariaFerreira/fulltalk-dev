@@ -1,0 +1,4 @@
+/target
+*.part
+*.json.tmp
+__pycache__/
