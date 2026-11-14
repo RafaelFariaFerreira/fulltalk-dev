@@ -2,10 +2,14 @@
 Type=Application
 Name=fulltalk dev
 GenericName=Voice dictation
+GenericName[pt_BR]=Ditado por voz
 Comment=Code is cheap, show me the talk — local push-to-talk transcription
+Comment[pt_BR]=Code is cheap, show me the talk — ditado local: segure o atalho, fale e solte
 Exec=fulltalk
+TryExec=fulltalk
 Icon=fulltalk
 Terminal=false
 Categories=Utility;Accessibility;
-Keywords=dictation;speech;voice;transcription;ditado;voz;
+Keywords=dictation;speech;voice;transcription;microphone;stt;push-to-talk;
+Keywords[pt_BR]=ditado;ditar;voz;fala;transcrição;transcrever;microfone;
 StartupWMClass=fulltalk

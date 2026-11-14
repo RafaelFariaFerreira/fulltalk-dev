@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>fulltalk dev</string>
+	<key>CFBundleDisplayName</key>
+	<string>fulltalk dev</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.fulltalk.fulltalk</string>
+	<key>CFBundleExecutable</key>
+	<string>fulltalk</string>
+	<key>CFBundleIconFile</key>
+	<string>fulltalk</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>fulltalk dev records your voice while you hold the shortcut or click the microphone, and transcribes it on this Mac. Audio never leaves the machine.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>MIT License. Rafael Faria Ferreira.</string>
+</dict>
+</plist>
