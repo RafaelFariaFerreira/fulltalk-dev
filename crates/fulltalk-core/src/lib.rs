@@ -9,6 +9,7 @@
 //! The OS-specific and model-specific adapters live in sibling crates and plug
 //! in through the traits defined in [`ports`].
 
+pub mod audio;
 pub mod chord;
 pub mod delivery;
 pub mod history;
