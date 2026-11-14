@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=fulltalk dev
+GenericName=Voice dictation
+Comment=Code is cheap, show me the talk — local push-to-talk transcription
+Exec=fulltalk
+Icon=fulltalk
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=dictation;speech;voice;transcription;ditado;voz;
+StartupWMClass=fulltalk

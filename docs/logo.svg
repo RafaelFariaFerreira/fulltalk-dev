@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="fulltalk dev">
+  <rect width="128" height="128" rx="30" fill="#5B3FE4"/>
+  <g fill="#fff">
+    <rect x="21.4" y="46.1" width="10.9" height="35.8" rx="5.45"/>
+    <rect x="40.0" y="30.7" width="10.9" height="66.6" rx="5.45"/>
+    <rect x="58.6" y="14.1" width="10.9" height="99.8" rx="5.45"/>
+    <rect x="77.2" y="30.7" width="10.9" height="66.6" rx="5.45"/>
+    <rect x="95.8" y="46.1" width="10.9" height="35.8" rx="5.45"/>
+  </g>
+</svg>
