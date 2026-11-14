@@ -13,7 +13,7 @@ use fulltalk_core::settings::Settings;
 use fulltalk_core::shortcut::Shortcut;
 use fulltalk_core::store;
 use fulltalk_platform::autostart::Autostart;
-use fulltalk_platform::hotkey::{HotkeyEvent, HotkeyService};
+use fulltalk_platform::hotkey::{HotkeyError, HotkeyEvent, HotkeyService};
 
 use crate::audio::Recorder;
 use crate::paths::Paths;
@@ -72,11 +72,19 @@ impl FulltalkApp {
 
         let hotkey_notify = notify.clone();
         let handler = Arc::new(move |e: HotkeyEvent| hotkey_notify.send(AppEvent::Hotkey(e)));
-        let (hotkeys, hotkey_error) = match HotkeyService::start(settings.shortcut, handler) {
-            Ok(service) => (Some(service), None),
-            Err(err) => {
-                tracing::warn!(%err, "global shortcut unavailable");
-                (None, Some(err.to_string()))
+        // README screenshots must look the same on any machine and must not
+        // make the desktop prompt for a shortcut, so they run without one.
+        let shooting =
+            cfg!(feature = "screenshot") && std::env::var_os("FULLTALK_SCREENSHOT").is_some();
+        let (hotkeys, hotkey_error) = if shooting {
+            (None, None)
+        } else {
+            match HotkeyService::start(settings.shortcut, handler) {
+                Ok(service) => (Some(service), None),
+                Err(err) => {
+                    tracing::warn!(%err, "global shortcut unavailable");
+                    (None, Some(err.to_string()))
+                }
             }
         };
         let modifiers = hotkeys
@@ -121,9 +129,21 @@ impl FulltalkApp {
     pub(crate) fn pump_events(&mut self) {
         while let Ok(event) = self.events.try_recv() {
             match event {
-                AppEvent::Hotkey(_) if self.capturing_shortcut => {}
-                AppEvent::Hotkey(HotkeyEvent::Pressed) => self.apply(Input::HotkeyPressed),
-                AppEvent::Hotkey(HotkeyEvent::Released) => self.apply(Input::HotkeyReleased),
+                AppEvent::Hotkey(HotkeyEvent::Denied) => {
+                    self.hotkey_error = Some(HotkeyError::Denied.to_string());
+                }
+                AppEvent::Hotkey(event) if self.capturing_shortcut => {
+                    tracing::debug!(?event, "shortcut ignored while a new one is captured");
+                }
+                AppEvent::Hotkey(HotkeyEvent::Pressed) => {
+                    tracing::debug!(state = ?self.state(), "shortcut pressed");
+                    self.hotkey_error = None; // it evidently works now
+                    self.apply(Input::HotkeyPressed);
+                }
+                AppEvent::Hotkey(HotkeyEvent::Released) => {
+                    tracing::debug!(state = ?self.state(), "shortcut released");
+                    self.apply(Input::HotkeyReleased);
+                }
                 AppEvent::CaptureFailed(reason) => {
                     // The device died mid-recording: release it before resetting.
                     self.recorder.stop();
@@ -217,6 +237,9 @@ impl FulltalkApp {
         };
         match result {
             Ok(()) => {
+                if self.hotkeys.is_some() {
+                    self.hotkey_error = None; // a new binding gets a fresh chance
+                }
                 self.settings.shortcut = shortcut;
                 self.shortcut_error = None;
                 self.persist_settings();
