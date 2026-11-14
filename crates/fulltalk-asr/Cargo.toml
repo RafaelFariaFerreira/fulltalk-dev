@@ -1,0 +1,23 @@
+[package]
+name = "fulltalk-asr"
+description = "Local speech recognition for fulltalk dev: NVIDIA Parakeet TDT 0.6B v3 (int8 ONNX) plus a verified model installer."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+fulltalk-core.workspace = true
+parakeet-rs = "0.4"
+sha2.workspace = true
+ureq.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+hound = "3"
+
+[lints]
+workspace = true
