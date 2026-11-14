@@ -17,8 +17,10 @@ cat > "$demo/history.json" <<'JSON'
 JSON
 
 cargo build --release -p fulltalk --features screenshot
-for scene in main recording toast settings; do
-  FULLTALK_LOG=error FULLTALK_HOME="$demo" FULLTALK_SCREENSHOT="docs/screenshots/$scene.png" \
+# The images are always rendered at 2x, whatever the scale of this machine's display.
+for scene in main history recording toast settings mini mini-recording; do
+  WINIT_X11_SCALE_FACTOR=2 \
+    FULLTALK_LOG=error FULLTALK_HOME="$demo" FULLTALK_SCREENSHOT="docs/screenshots/$scene.png" \
     FULLTALK_SCREENSHOT_SCENE="$scene" ./target/release/fulltalk
 done
 python3 scripts/make-hero.py

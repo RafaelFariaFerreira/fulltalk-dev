@@ -27,14 +27,15 @@ let go: the text lands in your editor, terminal or chat. Nothing leaves your mac
 
 - **Hold to talk**: hold <kbd>Alt</kbd>+<kbd>S</kbd> (configurable) anywhere, speak, release. Or click the mic to start and click again to stop.
 - **Pastes where you are**: if a text field, text area or terminal has focus, the transcription is pasted there (with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> in Linux terminals). Otherwise it just goes to the clipboard. It never pastes blindly.
-- **Last 5 transcriptions**, one click to copy again. They survive restarts.
-- **Always on top, never in the way**: a small floating window that doesn't steal focus when you click it.
+- **Last 5 transcriptions** behind the clock button: open the list when you want it, one click to copy again. They survive restarts.
+- **Always on top, never in the way**: a small floating window that stays compact and doesn't steal focus when you click it.
+- **Minimizes to a dot**: one click shrinks it to just the microphone in the top-right corner of the screen, grey while idle and violet while it listens. Click to talk, double-click to bring the window back.
 - **100% local and offline** after a one-time ~670 MB model download. Runs on the CPU, no GPU required.
 - **Light**: a single ~40 MB binary, about 0.8 GB of RAM (most of it is the model), ~0% CPU while idle.
 - **Feels native**: one command installs it with an icon in your app menu, Start Menu or Launchpad, so you open it from the system search.
 
 <div align="center">
-<img src="docs/hero.png" alt="fulltalk dev: main window with a 'transcription ready' toast and the settings window" width="820">
+<img src="docs/hero.png" alt="fulltalk dev: the compact window idle and recording, the window with the last transcriptions expanded, the minimized microphone (grey idle, violet recording) and the settings window" width="100%">
 </div>
 
 <br>
@@ -68,19 +69,24 @@ launch after that works offline.
 ```sh
 git clone https://github.com/RafaelFariaFerreira/fulltalk-dev.git
 cd fulltalk-dev
-scripts/setup-linux.sh     # one time, uses sudo: ALSA headers, `input` group, /dev/uinput access
-# log out and back in so the new group applies
+scripts/setup-linux.sh     # one time, uses sudo: ALSA headers and /dev/uinput access
 scripts/install-linux.sh   # builds, then adds "fulltalk dev" to your app menu
 ```
+
+On GNOME 48+ and KDE Plasma (Wayland) the shortcut is bound through the desktop's
+global-shortcuts portal: the first time the app starts, the system asks you to
+confirm it, and that is all. Nothing reads your keyboard.
 
 `setup-linux.sh` installs packages with `apt`. On other distros, install the ALSA
 development headers and `pkg-config` yourself (`alsa-lib-devel` on Fedora, `alsa-lib`
 on Arch); the script still does the rest.
 
 > [!WARNING]
-> Joining the `input` group lets your user's processes read every keyboard. Wayland
-> leaves no other way to get a hold-to-talk shortcut. If you skip it, the mic button
-> and the clipboard still work.
+> Wayland desktops without that portal (Sway, older GNOME) leave only one way to get a
+> hold-to-talk shortcut: reading the keyboards directly. There, `setup-linux.sh` adds
+> your user to the `input` group, which lets your processes read every keystroke, and
+> you need to log out and back in. If you would rather not, the mic button and the
+> clipboard still work without it.
 
 ### Windows
 
@@ -144,7 +150,7 @@ Two optimisations got memory down from 1.5 GB, and both are explained in code:
 ```mermaid
 flowchart LR
     subgraph OS["OS adapters · fulltalk-platform"]
-        HK["Global hotkey<br/>evdev · global-hotkey"]
+        HK["Global hotkey<br/>portal · evdev · global-hotkey"]
         FP["Focused widget?<br/>AT-SPI · UIA · AX"]
         PS["Paste keystroke<br/>uinput · enigo"]
         CB["Clipboard<br/>arboard"]
@@ -171,16 +177,16 @@ The project uses a **ports and adapters** layout split across four crates:
 
 | Crate | Responsibility | Tests |
 |---|---|---|
-| [`fulltalk-core`](crates/fulltalk-core) | Session state machine, hold-to-talk chord detection, shortcut parsing, paste-or-clipboard policy, audio DSP, history, persistence. **No I/O, no `unsafe`.** | 87 unit tests + property tests |
+| [`fulltalk-core`](crates/fulltalk-core) | Session state machine, hold-to-talk chord detection, shortcut parsing, paste-or-clipboard policy, audio DSP, history, persistence. **No I/O, no `unsafe`.** | 94 unit tests + property tests |
 | [`fulltalk-asr`](crates/fulltalk-asr) | Parakeet engine and a model installer that verifies each file's size and SHA-256 against a pinned upstream revision | offline installer tests with an in-memory fetcher |
 | [`fulltalk-platform`](crates/fulltalk-platform) | Per-OS adapters behind the core's ports | pure classification and key-mapping logic tested on every OS |
-| [`fulltalk`](crates/fulltalk) | egui app: controller, recorder, workers, UI | keymap, icon rasteriser, toasts |
+| [`fulltalk`](crates/fulltalk) | egui app: controller, recorder, workers, UI | keymap, icon rasteriser, toasts, header clicks |
 
 Some decisions worth calling out:
 
-- **The flow is a pure state machine.** [`Session::handle(Input) -> Vec<Effect>`](crates/fulltalk-core/src/session.rs) holds every rule: what a click does while recording, which input may stop a recording, what happens after a silent take. Each rule is unit-tested with no audio, model or window involved.
+- **The flow is a pure state machine.** [`Session::handle(Input) -> Vec<Effect>`](crates/fulltalk-core/src/session.rs) holds every rule: what a click does while recording, which input may stop a recording, what happens after a silent take, how a double click undoes the recording its first click started. Each rule is unit-tested with no audio, model or window involved.
 - **Pasting is never blind.** The delivery use case probes focus first, always fills the clipboard, and only sends a keystroke when a text input or terminal is known to have focus. If the paste fails, the text is still in the clipboard ([`delivery.rs`](crates/fulltalk-core/src/delivery.rs)).
-- **Wayland is handled as a real platform, not ignored.** Wayland compositors forbid global key grabs, synthetic input and always-on-top for normal clients. On Linux the window therefore runs through XWayland (always on top, no focus stealing via `WM_HINTS`), the shortcut is read through evdev, and paste goes through a uinput virtual keyboard.
+- **Wayland is handled as a real platform, not ignored.** Wayland compositors forbid global key grabs, synthetic input and always-on-top for normal clients. On Linux the window therefore runs through XWayland (always on top via `_NET_WM_STATE_ABOVE`, re-asserted once the window is mapped; no focus stealing via `WM_HINTS`), the shortcut is bound through the desktop's global-shortcuts portal (falling back to evdev where there is none), and paste goes through a uinput virtual keyboard.
 - **Focus detection works like a screen reader.** On Linux it tracks AT-SPI focus events and re-checks them live, falling back to a time-bounded tree search, so a frozen app can never freeze dictation ([`focus/linux.rs`](crates/fulltalk-platform/src/focus/linux.rs)).
 - **Nothing blocks the UI thread.** The model download and load, inference and delivery each run on a worker thread and report back through events.
 
@@ -189,7 +195,7 @@ Some decisions worth calling out:
 The domain was built test-first. One example: the chord tracker's first test run caught pressing <kbd>S</kbd> and then <kbd>Alt</kbd> being treated as the shortcut. The fix requires the main key to *complete* the chord, and `key_before_modifier_does_not_activate` keeps it that way.
 
 ```sh
-cargo test --workspace          # 115 tests
+cargo test --workspace          # 140 tests
 cargo clippy --workspace --all-targets --all-features   # pedantic, zero warnings
 ```
 
@@ -202,10 +208,10 @@ CI runs `fmt`, `clippy -D warnings` and the full test suite on **Linux, Windows 
 | | Linux (Wayland) | Linux (X11) | Windows | macOS |
 |---|---|---|---|---|
 | Transcription, UI, history, clipboard | ✅ | 🧪 | 🧪 | 🧪 |
-| Hold-to-talk shortcut | 🧪 evdev | 🧪 global-hotkey | 🧪 global-hotkey | 🧪 global-hotkey |
+| Hold-to-talk shortcut | ✅ desktop portal (GNOME 50) · 🧪 evdev fallback | 🧪 global-hotkey | 🧪 global-hotkey | 🧪 global-hotkey |
 | Paste into focused field | 🧪 uinput | 🧪 XTest | 🧪 SendInput | 🧪 CGEvent |
 | Detect text field / terminal | ✅ AT-SPI | 🧪 AT-SPI | 🧪 UI Automation | 🧪 AX API |
-| Always on top, click without stealing focus | 🧪 via XWayland | 🧪 | 🧪 `WS_EX_NOACTIVATE` | ⏳ planned |
+| Always on top, click and drag without stealing focus | ✅ via XWayland | 🧪 | 🧪 `WS_EX_NOACTIVATE` | ⏳ planned |
 | Shows up in the system app search | ✅ `.desktop` entry | 🧪 `.desktop` entry | 🧪 Start Menu shortcut | 🧪 `.app` bundle |
 
 Developed on Ubuntu 26.04 (GNOME, Wayland). Reports from other platforms are very welcome.
