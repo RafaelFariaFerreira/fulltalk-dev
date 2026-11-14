@@ -216,6 +216,7 @@ fn run_delivery(notify: &Notifier, modifiers: &ModifierProbe, jobs: &Receiver<De
                     auto_paste,
                 )
                 .map_err(|e| e.to_string());
+                tracing::debug!(?result, "transcription delivered");
                 notify.send(AppEvent::Delivered(result));
             }
         }

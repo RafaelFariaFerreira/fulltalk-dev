@@ -9,6 +9,10 @@ pub enum FocusTarget {
     TextInput,
     /// A terminal emulator.
     Terminal,
+    /// The active window belongs to an application that keeps its widgets to
+    /// itself, so there is no telling what has focus inside it. Chromium and
+    /// Electron do this on Linux unless a screen reader is running.
+    Opaque,
     /// Something that does not accept text (a button, the desktop, …).
     Other,
     /// Focus could not be determined.
@@ -58,8 +62,13 @@ impl DeliveryPlan {
     }
 }
 
-/// Picks the delivery plan. The text always goes to the clipboard; pasting only
-/// happens when we are confident a text input has focus — never blindly.
+/// Picks the delivery plan. The text always goes to the clipboard; pasting
+/// happens when a text input is known to have focus, never when something
+/// else is known to have it.
+///
+/// An [`FocusTarget::Opaque`] window gets the benefit of the doubt: the user
+/// asked for dictation while working in it, a paste that lands on no text
+/// field does nothing there, and the text is in the clipboard either way.
 pub const fn plan(target: FocusTarget, platform: Platform, auto_paste: bool) -> DeliveryPlan {
     if !auto_paste {
         return DeliveryPlan::ClipboardOnly;
@@ -68,7 +77,9 @@ pub const fn plan(target: FocusTarget, platform: Platform, auto_paste: bool) -> 
         (FocusTarget::Other | FocusTarget::Unknown, _) => return DeliveryPlan::ClipboardOnly,
         (_, Platform::MacOs) => PasteChord::CmdV,
         (FocusTarget::Terminal, Platform::Linux) => PasteChord::CtrlShiftV,
-        (FocusTarget::TextInput | FocusTarget::Terminal, _) => PasteChord::CtrlV,
+        (FocusTarget::TextInput | FocusTarget::Terminal | FocusTarget::Opaque, _) => {
+            PasteChord::CtrlV
+        }
     };
     DeliveryPlan::Paste(chord)
 }
@@ -173,6 +184,48 @@ mod tests {
         assert_eq!(outcome, Ok(Outcome::Pasted));
         assert_eq!(clip.text.as_deref(), Some("olá"));
         assert_eq!(paster.sent, [PasteChord::CtrlV]);
+    }
+
+    #[test]
+    fn pastes_into_a_window_that_hides_its_widgets() {
+        // Chrome does not say whether a text field has focus; it still gets the text.
+        let (mut clip, focus, mut paster) = (
+            FakeClipboard::default(),
+            FakeFocus::new(FocusTarget::Opaque),
+            FakePaster::default(),
+        );
+        let outcome = deliver("olá", &mut clip, &focus, &mut paster, Platform::Linux, true);
+        assert_eq!(outcome, Ok(Outcome::Pasted));
+        assert_eq!(clip.text.as_deref(), Some("olá"));
+        // Not the terminal chord: nothing says this is a terminal.
+        assert_eq!(paster.sent, [PasteChord::CtrlV]);
+    }
+
+    #[test]
+    fn opaque_windows_use_each_platforms_paste_chord() {
+        assert_eq!(
+            plan(FocusTarget::Opaque, Platform::MacOs, true),
+            DeliveryPlan::Paste(PasteChord::CmdV)
+        );
+        assert_eq!(
+            plan(FocusTarget::Opaque, Platform::Windows, true),
+            DeliveryPlan::Paste(PasteChord::CtrlV)
+        );
+        assert_eq!(
+            plan(FocusTarget::Opaque, Platform::Linux, false),
+            DeliveryPlan::ClipboardOnly
+        );
+    }
+
+    #[test]
+    fn unknown_focus_is_still_never_pasted_into() {
+        // No active window could be found at all: nothing to trust.
+        for platform in [Platform::Linux, Platform::Windows, Platform::MacOs] {
+            assert_eq!(
+                plan(FocusTarget::Unknown, platform, true),
+                DeliveryPlan::ClipboardOnly
+            );
+        }
     }
 
     #[test]

@@ -26,7 +26,7 @@ let go: the text lands in your editor, terminal or chat. Nothing leaves your mac
 ## Features
 
 - **Hold to talk**: hold <kbd>Alt</kbd>+<kbd>S</kbd> (configurable) anywhere, speak, release. Or click the mic to start and click again to stop.
-- **Pastes where you are**: if a text field, text area or terminal has focus, the transcription is pasted there (with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> in Linux terminals). Otherwise it just goes to the clipboard. It never pastes blindly.
+- **Pastes where you are**: if a text field, text area or terminal has focus, the transcription is pasted there (with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> in Linux terminals). Chrome and Electron apps hide their fields from other programs on Linux, so there it pastes whenever one of their windows is the active one. Anywhere else the text just goes to the clipboard.
 - **Last 5 transcriptions** behind the clock button: open the list when you want it, one click to copy again. They survive restarts.
 - **Always on top, never in the way**: a small floating window that stays compact and doesn't steal focus when you click it.
 - **Minimizes to a dot**: one click shrinks it to just the microphone in the top-right corner of the screen, grey while idle and violet while it listens. Click to talk, double-click to bring the window back.
@@ -177,7 +177,7 @@ The project uses a **ports and adapters** layout split across four crates:
 
 | Crate | Responsibility | Tests |
 |---|---|---|
-| [`fulltalk-core`](crates/fulltalk-core) | Session state machine, hold-to-talk chord detection, shortcut parsing, paste-or-clipboard policy, audio DSP, history, persistence. **No I/O, no `unsafe`.** | 94 unit tests + property tests |
+| [`fulltalk-core`](crates/fulltalk-core) | Session state machine, hold-to-talk chord detection, shortcut parsing, paste-or-clipboard policy, audio DSP, history, persistence. **No I/O, no `unsafe`.** | 97 unit tests + property tests |
 | [`fulltalk-asr`](crates/fulltalk-asr) | Parakeet engine and a model installer that verifies each file's size and SHA-256 against a pinned upstream revision | offline installer tests with an in-memory fetcher |
 | [`fulltalk-platform`](crates/fulltalk-platform) | Per-OS adapters behind the core's ports | pure classification and key-mapping logic tested on every OS |
 | [`fulltalk`](crates/fulltalk) | egui app: controller, recorder, workers, UI | keymap, icon rasteriser, toasts, header clicks |
@@ -185,9 +185,9 @@ The project uses a **ports and adapters** layout split across four crates:
 Some decisions worth calling out:
 
 - **The flow is a pure state machine.** [`Session::handle(Input) -> Vec<Effect>`](crates/fulltalk-core/src/session.rs) holds every rule: what a click does while recording, which input may stop a recording, what happens after a silent take, how a double click undoes the recording its first click started. Each rule is unit-tested with no audio, model or window involved.
-- **Pasting is never blind.** The delivery use case probes focus first, always fills the clipboard, and only sends a keystroke when a text input or terminal is known to have focus. If the paste fails, the text is still in the clipboard ([`delivery.rs`](crates/fulltalk-core/src/delivery.rs)).
+- **Pasting is deliberate.** The delivery use case probes focus first, always fills the clipboard, and only sends a keystroke when a text input or terminal is known to have focus. The one exception is an active Chromium window: on Linux, Chrome and Electron keep their widgets private unless a screen reader is running, and switching that on for the whole session would slow every browser down. Such a window is trusted instead, since a paste that lands on no field does nothing there. If the paste fails, the text is still in the clipboard ([`delivery.rs`](crates/fulltalk-core/src/delivery.rs)).
 - **Wayland is handled as a real platform, not ignored.** Wayland compositors forbid global key grabs, synthetic input and always-on-top for normal clients. On Linux the window therefore runs through XWayland (always on top via `_NET_WM_STATE_ABOVE`, re-asserted once the window is mapped; no focus stealing via `WM_HINTS`), the shortcut is bound through the desktop's global-shortcuts portal (falling back to evdev where there is none), and paste goes through a uinput virtual keyboard.
-- **Focus detection works like a screen reader.** On Linux it tracks AT-SPI focus events and re-checks them live, falling back to a time-bounded tree search, so a frozen app can never freeze dictation ([`focus/linux.rs`](crates/fulltalk-platform/src/focus/linux.rs)).
+- **Focus detection works like a screen reader.** On Linux it tracks AT-SPI focus events and re-checks them live (still focused, and inside the active window: GNOME Shell's own stage claims focus whenever no window holds the keyboard), falling back to a time-bounded tree search, so a frozen app can never freeze dictation ([`focus/linux.rs`](crates/fulltalk-platform/src/focus/linux.rs)).
 - **Nothing blocks the UI thread.** The model download and load, inference and delivery each run on a worker thread and report back through events.
 
 ### Test-driven development
@@ -195,7 +195,7 @@ Some decisions worth calling out:
 The domain was built test-first. One example: the chord tracker's first test run caught pressing <kbd>S</kbd> and then <kbd>Alt</kbd> being treated as the shortcut. The fix requires the main key to *complete* the chord, and `key_before_modifier_does_not_activate` keeps it that way.
 
 ```sh
-cargo test --workspace          # 140 tests
+cargo test --workspace          # 145 tests
 cargo clippy --workspace --all-targets --all-features   # pedantic, zero warnings
 ```
 
@@ -210,7 +210,7 @@ CI runs `fmt`, `clippy -D warnings` and the full test suite on **Linux, Windows 
 | Transcription, UI, history, clipboard | ✅ | 🧪 | 🧪 | 🧪 |
 | Hold-to-talk shortcut | ✅ desktop portal (GNOME 50) · 🧪 evdev fallback | 🧪 global-hotkey | 🧪 global-hotkey | 🧪 global-hotkey |
 | Paste into focused field | 🧪 uinput | 🧪 XTest | 🧪 SendInput | 🧪 CGEvent |
-| Detect text field / terminal | ✅ AT-SPI | 🧪 AT-SPI | 🧪 UI Automation | 🧪 AX API |
+| Detect text field / terminal | ✅ AT-SPI (Chromium windows are trusted) | 🧪 AT-SPI | 🧪 UI Automation | 🧪 AX API |
 | Always on top, click and drag without stealing focus | ✅ via XWayland | 🧪 | 🧪 `WS_EX_NOACTIVATE` | ⏳ planned |
 | Shows up in the system app search | ✅ `.desktop` entry | 🧪 `.desktop` entry | 🧪 Start Menu shortcut | 🧪 `.app` bundle |
 
@@ -222,6 +222,7 @@ Developed on Ubuntu 26.04 (GNOME, Wayland). Reports from other platforms are ver
 cargo run -p fulltalk                                  # the app (FULLTALK_LOG=debug for verbose logs)
 cargo run --release -p fulltalk-asr --example transcribe -- <model-dir> file.wav   # benchmark
 cargo run -p fulltalk-platform --example probe_focus  # what has focus right now?
+cargo run -p fulltalk-platform --example deliver -- "text" 3   # paste into whatever has focus in 3 s
 scripts/screenshots.sh                                 # regenerate the README screenshots from the real app
 scripts/make-illustrations.py                          # render docs/illustrations/*.svg to PNG (needs Chrome)
 scripts/make-icons.py                                  # rebuild the .ico and .icns from the logo (needs Pillow)

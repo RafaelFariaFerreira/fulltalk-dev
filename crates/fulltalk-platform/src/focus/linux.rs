@@ -3,10 +3,17 @@
 //! Two layers, like a screen reader:
 //! 1. **Event tracking** — a background task listens to `object:state-changed:focused`
 //!    and remembers the last object that gained focus. At query time it is
-//!    re-verified live (still `Focused`?), so a stale value is never trusted.
+//!    re-verified live (still `Focused`, and inside the active window?), so a
+//!    stale value is never trusted.
 //! 2. **Tree scan fallback** — find the `Active` top-level window and search it
 //!    for the `Focused` descendant (`Collection` when the toolkit supports it,
 //!    otherwise a bounded walk over showing children; GTK 4 needs the latter).
+//!
+//! Chromium and Electron applications are a special case: they register their
+//! windows but keep everything inside them private unless a screen reader is
+//! running. Turning that switch on for the whole session would slow every
+//! browser down, so such a window is reported as [`FocusTarget::Opaque`] and
+//! the delivery policy decides what to do with it.
 //!
 //! Every D-Bus call is bounded by a timeout: a frozen application must never
 //! freeze dictation. Failures degrade to [`FocusTarget::Unknown`], which the
@@ -21,6 +28,7 @@ use atspi::connection::AccessibilityConnection;
 use atspi::events::object::StateChangedEvent;
 use atspi::events::{Event, ObjectEvents};
 use atspi::proxy::accessible::{AccessibleProxy, ObjectRefExt};
+use atspi::proxy::application::ApplicationProxy;
 use atspi::proxy::collection::CollectionProxy;
 use atspi::{MatchType, ObjectMatchRule, ObjectRefOwned, Role, SortOrder, State, StateSet};
 use fulltalk_core::delivery::FocusTarget;
@@ -31,6 +39,8 @@ const CALL_TIMEOUT: Duration = Duration::from_millis(250);
 const TOTAL_TIMEOUT: Duration = Duration::from_millis(900);
 /// Upper bound on nodes visited by the fallback walk.
 const MAX_WALK_NODES: usize = 1500;
+/// Upper bound on ancestors climbed to find the window an object lives in.
+const MAX_ANCESTORS: usize = 64;
 
 /// Classifies the focused accessible object.
 pub(crate) fn classify(role: Role, states: StateSet) -> FocusTarget {
@@ -41,6 +51,13 @@ pub(crate) fn classify(role: Role, states: StateSet) -> FocusTarget {
     } else {
         FocusTarget::Other
     }
+}
+
+/// Whether an active window in which no focused widget was found is one that
+/// simply cannot be looked into: a Chromium-based application (that is what
+/// Chrome and Electron report as their toolkit) exposing no readable child.
+pub(crate) fn hides_its_widgets(toolkit: &str, readable_children: usize) -> bool {
+    toolkit.eq_ignore_ascii_case("chromium") && readable_children == 0
 }
 
 type Tracked = Arc<Mutex<Option<ObjectRefOwned>>>;
@@ -103,7 +120,10 @@ impl AtspiFocusProbe {
         if let Some(object) = tracked
             && let Some(target) = describe_if_focused(conn, &object).await
         {
-            return Some(target);
+            if in_active_window(conn, &object).await {
+                return Some(target);
+            }
+            tracing::debug!("the last focused object is not in the active window, ignoring it");
         }
         scan(a11y).await
     }
@@ -115,9 +135,11 @@ impl FocusProbe for AtspiFocusProbe {
             return FocusTarget::Unknown;
         };
         let tracked = self.last_focused.lock().ok().and_then(|g| g.clone());
-        zbus::block_on(with_timeout(TOTAL_TIMEOUT, Self::query(a11y, tracked)))
+        let target = zbus::block_on(with_timeout(TOTAL_TIMEOUT, Self::query(a11y, tracked)))
             .flatten()
-            .unwrap_or(FocusTarget::Unknown)
+            .unwrap_or(FocusTarget::Unknown);
+        tracing::debug!(?target, "focus probed");
+        target
     }
 }
 
@@ -159,6 +181,35 @@ async fn describe_if_focused(
     Some(classify(role, states))
 }
 
+/// Whether `object` sits in the window that is active right now.
+///
+/// A focus event is not proof of focus. GNOME Shell's stage calls itself
+/// focused whenever no window holds the keyboard the usual way, which is the
+/// case right after a click on our own never-focused window, and it would
+/// otherwise hide the application the user is really typing in.
+async fn in_active_window(conn: &zbus::Connection, object: &ObjectRefOwned) -> bool {
+    let mut current = object.clone();
+    for _ in 0..MAX_ANCESTORS {
+        let Some(proxy) = bounded(current.as_accessible_proxy(conn)).await else {
+            return false;
+        };
+        let Some(parent) = bounded(proxy.parent()).await else {
+            return false;
+        };
+        let Some(parent_proxy) = bounded(parent.as_accessible_proxy(conn)).await else {
+            return false;
+        };
+        // A top-level window is a direct child of its application.
+        if bounded(parent_proxy.get_role()).await == Some(Role::Application) {
+            return bounded(proxy.get_state())
+                .await
+                .is_some_and(|states| states.contains(State::Active));
+        }
+        current = parent;
+    }
+    false
+}
+
 /// Fallback: find the active window(s) and the focused descendant inside.
 async fn scan(a11y: &AccessibilityConnection) -> Option<FocusTarget> {
     let conn = a11y.connection();
@@ -166,8 +217,8 @@ async fn scan(a11y: &AccessibilityConnection) -> Option<FocusTarget> {
     let apps = bounded(root.get_children()).await?;
 
     let mut saw_active_window = false;
-    for app in &apps {
-        let Some(app) = bounded(app.as_accessible_proxy(conn)).await else {
+    for app_ref in &apps {
+        let Some(app) = bounded(app_ref.as_accessible_proxy(conn)).await else {
             continue;
         };
         for window in bounded(app.get_children()).await.unwrap_or_default() {
@@ -186,11 +237,48 @@ async fn scan(a11y: &AccessibilityConnection) -> Option<FocusTarget> {
             {
                 return Some(target);
             }
+            if is_opaque(conn, app_ref, &proxy).await {
+                return Some(FocusTarget::Opaque);
+            }
         }
     }
     // An active window with nothing focused accepts no text; no accessible
     // active window at all means an app we cannot see into.
     saw_active_window.then_some(FocusTarget::Other)
+}
+
+/// See [`hides_its_widgets`].
+async fn is_opaque(
+    conn: &zbus::Connection,
+    app: &ObjectRefOwned,
+    window: &AccessibleProxy<'_>,
+) -> bool {
+    let Some(toolkit) = toolkit_name(conn, app).await else {
+        return false;
+    };
+    let mut readable = 0;
+    for child in bounded(window.get_children()).await.unwrap_or_default() {
+        // A hidden tree still reports a child, but it is a null reference.
+        if let Some(proxy) = bounded(child.as_accessible_proxy(conn)).await
+            && bounded(proxy.get_state()).await.is_some()
+        {
+            readable += 1;
+        }
+    }
+    hides_its_widgets(&toolkit, readable)
+}
+
+async fn toolkit_name(conn: &zbus::Connection, app: &ObjectRefOwned) -> Option<String> {
+    let bus_name = app.name()?.clone();
+    let application = bounded(async {
+        ApplicationProxy::builder(conn)
+            .destination(bus_name)?
+            .path(app.path().clone())?
+            .build()
+            .await
+    })
+    .await?;
+    bounded(application.toolkit_name()).await
 }
 
 async fn find_focused(conn: &zbus::Connection, window: &ObjectRefOwned) -> Option<ObjectRefOwned> {
@@ -297,6 +385,22 @@ mod tests {
                 "{role:?}"
             );
         }
+    }
+
+    #[test]
+    fn chromium_windows_with_a_hidden_tree_are_opaque() {
+        // What Chrome and Electron report without a screen reader running.
+        assert!(hides_its_widgets("Chromium", 0));
+        assert!(hides_its_widgets("chromium", 0));
+    }
+
+    #[test]
+    fn readable_or_non_chromium_windows_are_not_opaque() {
+        // Chrome with accessibility on: its widgets can be trusted.
+        assert!(!hides_its_widgets("Chromium", 3));
+        // A GTK window with nothing focused really has nothing to paste into.
+        assert!(!hides_its_widgets("GTK", 0));
+        assert!(!hides_its_widgets("", 0));
     }
 
     #[test]
